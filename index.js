@@ -53,14 +53,25 @@ app.use(cors());
 
 app.post("/login", async (req, res) => {
   try {
+    console.log("Incoming request body:", req.body);
+
     const { userId, username, firstName, lastName, photoUrl } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "User ID is required" });
     }
 
+    console.log("Checking Firestore connection...");
+    console.log("Firestore instance:", firestore);
+
     const userRef = doc(firestore, "users", String(userId));
+    console.log("User ref created:", userRef.path);
+
     const docSnapshot = await getDoc(userRef);
+    console.log(
+      "Firestore document snapshot:",
+      docSnapshot.exists() ? docSnapshot.data() : "Not found"
+    );
 
     let userData;
     if (docSnapshot.exists()) {
@@ -76,13 +87,14 @@ app.post("/login", async (req, res) => {
         createdAt: new Date(),
       };
 
+      console.log("Saving new user to Firestore:", userData);
       await setDoc(userRef, userData);
     }
 
+    console.log("Returning user data:", userData);
     res.status(200).json(userData);
   } catch (error) {
-    console.error("Error handling user data:", error);
-
+    console.error("🔥 Error handling user data:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
