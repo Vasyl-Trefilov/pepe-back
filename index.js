@@ -79,23 +79,9 @@ app.post("/login", async (req, res) => {
       await setDoc(userRef, userData);
     }
 
-    await bot.answerWebAppQuery(userId, {
-      type: "article",
-      id: String(userId),
-      title: "Успешная регистрация",
-      input_message_content: { message_text: "Поздравляю со входом!" },
-    });
-
     res.status(200).json(userData);
   } catch (error) {
     console.error("Error handling user data:", error);
-
-    await bot.answerWebAppQuery("error", {
-      type: "article",
-      id: "error",
-      title: "Ошибка входа",
-      input_message_content: { message_text: "Произошла ошибка входа." },
-    });
 
     res.status(500).json({ message: "Server error" });
   }
