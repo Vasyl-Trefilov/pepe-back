@@ -77,7 +77,7 @@ app.post("/login", async (req, res) => {
         first_name: String(firstName || "Unknown"),
         last_name: String(lastName || "Unknown"),
         photo_url: String(photoUrl || ""),
-        inventory: ["nft_001", "nft_002", "nft_003"],
+        inventory: [],
         balance: 0,
         createdAt: new Date(),
       };
@@ -135,15 +135,17 @@ app.post("/userNft", async (req, res) => {
 
 app.post("/updateBalance", async (req, res) => {
   const { userId, amount } = req.body;
-
+  if (!userId) {
+    return res.status(400).json({ error: "UserId is required" });
+  }
   try {
     const userRef = doc(firestore, "users", userId);
     const userSnap = await getDoc(userRef);
 
     if (userSnap.exists()) {
       const userData = userSnap.data();
-      const currentBalance = userData.balance || 0;
-      const newBalance = currentBalance + amount;
+      const currentBalance = parseInt(userData.balance, 10) || 0; // Преобразование в целое число
+      const newBalance = currentBalance + parseInt(amount, 10); // Преобразование amount в целое число
 
       await updateDoc(userRef, { balance: newBalance });
 
