@@ -7,7 +7,7 @@ const WEBAPP_URL = process.env.WEBAPP_URL;
 //node.js
 import express from "express";
 import cors from "cors";
-import { doc, getDoc, setDoc, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, getDocs, updateDoc } from "firebase/firestore";
 import { firestore } from "./firebaseConfig.js";
 
 bot.start((ctx) => {
@@ -135,8 +135,8 @@ app.post("/userNft", async (req, res) => {
 
 app.post("/updateBalance", async (req, res) => {
   const { userId, amount } = req.body;
-  if (!userId) {
-    return res.status(400).json({ error: "UserId is required" });
+  if (!userId || amount === undefined) {
+    return res.status(400).json({ error: "UserId and amount are required" });
   }
   try {
     const userRef = doc(firestore, "users", userId);
@@ -144,13 +144,13 @@ app.post("/updateBalance", async (req, res) => {
 
     if (userSnap.exists()) {
       const userData = userSnap.data();
-      const currentBalance = parseInt(userData.balance, 10) || 0; // Преобразование в целое число
-      const newBalance = currentBalance + parseInt(amount, 10); // Преобразование amount в целое число
+      const currentBalance = parseInt(userData.balance, 10) || 0;
+      const newBalance = currentBalance + parseInt(amount, 10);
 
       await updateDoc(userRef, { balance: newBalance });
 
       console.log(`✅ Баланс обновлен: ${newBalance} TON`);
-      res.json({ success: true, newBalance }).status(200);
+      res.status(200).json({ success: true, newBalance });
     } else {
       console.log("❌ Пользователь не найден");
       res.status(404).json({ error: "User not found" });
