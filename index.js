@@ -1,14 +1,22 @@
-import dotenv from "dotenv";
-import { Telegraf } from "telegraf";
+const dotenv = require("dotenv");
+const { Telegraf } = require("telegraf");
 dotenv.config();
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const WEBAPP_URL = process.env.WEBAPP_URL;
 
-//node.js
-import express from "express";
-import cors from "cors";
-import { doc, getDoc, setDoc, getDocs, updateDoc } from "firebase/firestore";
-import { firestore } from "./firebaseConfig.js";
+const cheerio = require("cheerio"); // Импортируем cheerio для парсинга HTML
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+
+// const {
+//   doc,
+//   getDoc,
+//   setDoc,
+//   getDocs,
+//   updateDoc,
+// } = require("firebase/firestore");
+// const { firestore } = require("./firebaseConfig.js");
 
 bot.start((ctx) => {
   ctx.reply(
@@ -50,7 +58,6 @@ process.once("SIGTERM", () => bot.stop("SIGTERM"));
 const app = express();
 app.use(express.json());
 app.use(cors());
-
 
 app.post("/getGift", async (req, res) => {
   try {
