@@ -1,7 +1,8 @@
 const dotenv = require("dotenv");
 const { Telegraf } = require("telegraf");
 dotenv.config();
-const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk");
+const bot = new Telegraf(process.env.BOT_TOKEN);
+// const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk");
 const WEBAPP_URL = process.env.WEBAPP_URL;
 
 const cheerio = require("cheerio"); // Импортируем cheerio для парсинга HTML
@@ -61,13 +62,12 @@ app.use(cors());
 
 app.post("/getGift", async (req, res) => {
   try {
-    const data = await getData();
+    const data = await start();
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch data" });
   }
 });
-
 async function loadPLimit() {
   const { default: pLimit } = await import("p-limit");
   return pLimit;
@@ -75,12 +75,15 @@ async function loadPLimit() {
 
 async function start() {
   const pLimit = await loadPLimit();
-  const limit = pLimit(10);
+  const limit = pLimit(10); // Ограничение на 10 запросов одновременно
 
   console.log("pLimit загружен успешно!");
+
+  // Передаём limit в getData()
+  const data = await getData(limit);
+  return data;
 }
 
-start();
 const gifts = [
   "https://t.me/nft/PlushPepe-384",
   "https://t.me/nft/CandyCane-13442",
@@ -231,9 +234,13 @@ async function fetchGiftData(url) {
   }
 }
 
-async function getData() {
+async function getData(limit) {
+  if (!limit) {
+    throw new Error("limit не передан в getData()");
+  }
+
   try {
-    const requests = gifts.map((url) => limit(() => fetchGiftData(url))); // Запускаем с ограничением
+    const requests = gifts.map((url) => limit(() => fetchGiftData(url))); // Используем переданный limit
     const resGifts = (await Promise.all(requests)).filter(Boolean);
     return resGifts;
   } catch (error) {
