@@ -68,7 +68,96 @@ app.post("/getGift", async (req, res) => {
   }
 });
 
+const pLimit = require("p-limit").default;
+
+const limit = pLimit(10); // Ограничиваем до 5 одновременных запросов
+
 const gifts = [
+  "https://t.me/nft/PlushPepe-384",
+  "https://t.me/nft/CandyCane-13442",
+  "https://t.me/nft/DurovsCap-2862",
+  "https://t.me/nft/PreciousPeach-929",
+  "https://t.me/nft/DiamondRing-28483",
+  "https://t.me/nft/LovePotion-16396",
+  "https://t.me/nft/ToyBear-6300",
+  "https://t.me/nft/LootBag-9507",
+  "https://t.me/nft/JingleBells-8421",
+  "https://t.me/nft/LunarSnake-8709",
+  "https://t.me/nft/LolPop-206660",
+  "https://t.me/nft/GingerCookie-58353",
+  "https://t.me/nft/CookieHeart-62004",
+  "https://t.me/nft/CrystalBall-15888",
+  "https://t.me/nft/HypnoLollipop-9814",
+  "https://t.me/nft/GingerCookie-73463",
+  "https://t.me/nft/TamaGadget-10581",
+  "https://t.me/nft/PlushPepe-384",
+  "https://t.me/nft/CandyCane-13442",
+  "https://t.me/nft/DurovsCap-2862",
+  "https://t.me/nft/PreciousPeach-929",
+  "https://t.me/nft/DiamondRing-28483",
+  "https://t.me/nft/LovePotion-16396",
+  "https://t.me/nft/ToyBear-6300",
+  "https://t.me/nft/LootBag-9507",
+  "https://t.me/nft/JingleBells-8421",
+  "https://t.me/nft/LunarSnake-8709",
+  "https://t.me/nft/LolPop-206660",
+  "https://t.me/nft/GingerCookie-58353",
+  "https://t.me/nft/CookieHeart-62004",
+  "https://t.me/nft/CrystalBall-15888",
+  "https://t.me/nft/HypnoLollipop-9814",
+  "https://t.me/nft/GingerCookie-73463",
+  "https://t.me/nft/TamaGadget-10581",
+  "https://t.me/nft/PlushPepe-384",
+  "https://t.me/nft/CandyCane-13442",
+  "https://t.me/nft/DurovsCap-2862",
+  "https://t.me/nft/PreciousPeach-929",
+  "https://t.me/nft/DiamondRing-28483",
+  "https://t.me/nft/LovePotion-16396",
+  "https://t.me/nft/ToyBear-6300",
+  "https://t.me/nft/LootBag-9507",
+  "https://t.me/nft/JingleBells-8421",
+  "https://t.me/nft/LunarSnake-8709",
+  "https://t.me/nft/LolPop-206660",
+  "https://t.me/nft/GingerCookie-58353",
+  "https://t.me/nft/CookieHeart-62004",
+  "https://t.me/nft/CrystalBall-15888",
+  "https://t.me/nft/HypnoLollipop-9814",
+  "https://t.me/nft/GingerCookie-73463",
+  "https://t.me/nft/TamaGadget-10581",
+  "https://t.me/nft/PlushPepe-384",
+  "https://t.me/nft/CandyCane-13442",
+  "https://t.me/nft/DurovsCap-2862",
+  "https://t.me/nft/PreciousPeach-929",
+  "https://t.me/nft/DiamondRing-28483",
+  "https://t.me/nft/LovePotion-16396",
+  "https://t.me/nft/ToyBear-6300",
+  "https://t.me/nft/LootBag-9507",
+  "https://t.me/nft/JingleBells-8421",
+  "https://t.me/nft/LunarSnake-8709",
+  "https://t.me/nft/LolPop-206660",
+  "https://t.me/nft/GingerCookie-58353",
+  "https://t.me/nft/CookieHeart-62004",
+  "https://t.me/nft/CrystalBall-15888",
+  "https://t.me/nft/HypnoLollipop-9814",
+  "https://t.me/nft/GingerCookie-73463",
+  "https://t.me/nft/TamaGadget-10581",
+  "https://t.me/nft/PlushPepe-384",
+  "https://t.me/nft/CandyCane-13442",
+  "https://t.me/nft/DurovsCap-2862",
+  "https://t.me/nft/PreciousPeach-929",
+  "https://t.me/nft/DiamondRing-28483",
+  "https://t.me/nft/LovePotion-16396",
+  "https://t.me/nft/ToyBear-6300",
+  "https://t.me/nft/LootBag-9507",
+  "https://t.me/nft/JingleBells-8421",
+  "https://t.me/nft/LunarSnake-8709",
+  "https://t.me/nft/LolPop-206660",
+  "https://t.me/nft/GingerCookie-58353",
+  "https://t.me/nft/CookieHeart-62004",
+  "https://t.me/nft/CrystalBall-15888",
+  "https://t.me/nft/HypnoLollipop-9814",
+  "https://t.me/nft/GingerCookie-73463",
+  "https://t.me/nft/TamaGadget-10581",
   "https://t.me/nft/PlushPepe-384",
   "https://t.me/nft/CandyCane-13442",
   "https://t.me/nft/DurovsCap-2862",
@@ -88,54 +177,55 @@ const gifts = [
   "https://t.me/nft/TamaGadget-10581",
 ];
 
-const resGifts = [];
+async function fetchGiftData(url) {
+  try {
+    console.log(`Fetching: ${url}`);
+    const response = await axios.get(url);
+    if (response.status !== 200) {
+      console.error(`Error fetching ${url}: Status ${response.status}`);
+      return null;
+    }
+
+    const $ = cheerio.load(response.data);
+
+    let imageHref = "",
+      stopColors = [],
+      sources = [];
+
+    // Парсим картинку
+    const imageElement = $("image");
+    if (imageElement.length) {
+      imageHref = imageElement.attr("href") || imageElement.attr("src") || "";
+    }
+
+    // Парсим stop-color
+    $("stop").each((_, stop) => {
+      const color = $(stop).attr("stop-color");
+      if (color) stopColors.push(color);
+    });
+
+    // Парсим source
+    $("source").each((_, source) => {
+      const srcset = $(source).attr("srcset");
+      if (srcset) sources.push(srcset);
+    });
+
+    return {
+      firstColor: stopColors[0] || "#000000",
+      secondColor: stopColors[1] || "#FFFFFF",
+      animationUrl: sources[0] || "",
+      patternUrl: imageHref,
+    };
+  } catch (error) {
+    console.error(`Error processing ${url}:`, error);
+    return null;
+  }
+}
 
 async function getData() {
   try {
-    const resGifts = [];
-
-    for (const url of gifts) {
-      console.log(`Fetching: ${url}`);
-
-      const response = await axios.get(url);
-      if (response.status !== 200) {
-        console.error(`Error fetching ${url}: Status ${response.status}`);
-        continue;
-      }
-
-      const $ = cheerio.load(response.data);
-
-      let imageHref = "",
-        stopColors = [],
-        sources = [];
-
-      // Парсим картинку (если есть)
-      const imageElement = $("image");
-      if (imageElement.length) {
-        imageHref = imageElement.attr("href") || imageElement.attr("src") || "";
-      }
-
-      // Парсим stop-color (если есть)
-      $("stop").each((_, stop) => {
-        const color = $(stop).attr("stop-color");
-        if (color) stopColors.push(color);
-      });
-
-      // Парсим source (если есть)
-      $("source").each((_, source) => {
-        const srcset = $(source).attr("srcset");
-        if (srcset) sources.push(srcset);
-      });
-
-      // Добавляем данные в массив
-      resGifts.push({
-        firstColor: stopColors[0] || "#000000", // Фолбэк цвет
-        secondColor: stopColors[1] || "#FFFFFF",
-        animationUrl: sources[0] || "",
-        patternUrl: imageHref,
-      });
-    }
-
+    const requests = gifts.map((url) => limit(() => fetchGiftData(url))); // Запускаем с ограничением
+    const resGifts = (await Promise.all(requests)).filter(Boolean);
     return resGifts;
   } catch (error) {
     console.error("Error:", error);
