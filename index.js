@@ -1,8 +1,8 @@
 const dotenv = require("dotenv");
 const { Telegraf } = require("telegraf");
 dotenv.config();
-const bot = new Telegraf(process.env.BOT_TOKEN);
-// const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk");
+// const bot = new Telegraf(process.env.BOT_TOKEN);
+const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk");
 const WEBAPP_URL = process.env.WEBAPP_URL;
 
 const cheerio = require("cheerio"); // Импортируем cheerio для парсинга HTML
@@ -75,7 +75,7 @@ async function loadPLimit() {
 
 async function start() {
   const pLimit = await loadPLimit();
-  const limit = pLimit(10); // Ограничение на 10 запросов одновременно
+  const limit = pLimit(50); // Ограничение на 10 запросов одновременно
 
   console.log("pLimit загружен успешно!");
 
