@@ -191,7 +191,6 @@ const gifts = [
 
 async function fetchGiftData(url) {
   try {
-    console.log(`Fetching: ${url}`);
     const response = await axios.get(url);
     if (response.status !== 200) {
       console.error(`Error fetching ${url}: Status ${response.status}`);
@@ -226,6 +225,7 @@ async function fetchGiftData(url) {
       firstColor: stopColors[0] || "#000000",
       secondColor: stopColors[1] || "#FFFFFF",
       animationUrl: sources[0] || "",
+      preImage: sources[1] || "",
       patternUrl: imageHref,
     };
   } catch (error) {
