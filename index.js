@@ -19,6 +19,120 @@ const axios = require("axios");
 // } = require("firebase/firestore");
 // const { firestore } = require("./firebaseConfig.js");
 
+const { TelegramClient, Api } = require("telegram");
+const { StringSession } = require("telegram/sessions");
+const { NewMessage } = require("telegram/events");
+
+// Твои api_id и api_hash
+const apiId = 26232115;
+const apiHash = "ca1913add4b5275cac3c1e28fd59278c";
+const session = new StringSession(
+  "1AgAOMTQ5LjE1NC4xNjcuNDEBu7TheBijmG7eCWasNshGGPgbicg/6PGCD4dpPzHcEv5biKiGtaUiQW84gOzbIic8v3LTK5juWf9dnfArOisuSfnEvC+T/qzDEyETpICDDeHZagQRStmZmRKLAur0/YGYtmMseGLduypJ93iDsrJDcu0bRWzZeW6EqfwOWXJCPSDmOVs4phSvrVuH70QwOgwLvZBmQQi1ABReU3iibqhE5KUl4ubzcWC0/yQ/JtYkK0rTFoFL9E1izDGi4kXhAFJqh1jCtS0hMgmpUJkFRhvQgIKl/Ya0R7LHnQZtC9mWuLbcphyYQeB7ND70QUqThyY8pUnM9x5Xc2qotCgjUmVzQIo="
+);
+
+const client = new TelegramClient(session, apiId, apiHash, {});
+
+async function getUserDisplayName(client, userId) {
+  try {
+    const user = await client.getEntity(userId);
+    if (user.username) return `@${user.username}`;
+    if (user.firstName || user.lastName)
+      return `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    return `id${user.id}`;
+  } catch (err) {
+    console.error("Ошибка при получении пользователя:", err);
+    return `id${userId}`;
+  }
+}
+
+async function handleGiftRequest(msg, sender) {
+  try {
+    console.log("Запрос на подарки от пользователя", sender.id);
+
+    const result = await client.invoke(
+      new Api.payments.GetSavedStarGifts({
+        peer: new Api.PeerUser({ userId: sender.id }),
+        limit: 100,
+        offset: "",
+      })
+    );
+
+    if (result && result.gifts && result.gifts.length > 0) {
+      console.log("Найдено подарков:", result.gifts.length);
+
+      for (const gift of result.gifts) {
+        // Проверка на корректность данных
+        if (!gift || !gift.gift) continue;
+
+        let senderName = "Аноним";
+        if (gift.fromId?.userId?.value && !gift.nameHidden) {
+          senderName = await getUserDisplayName(
+            client,
+            gift.fromId.userId.value
+          );
+        }
+
+        const giftTitle = gift.gift.title || "Без названия";
+        const stars =
+          gift.gift.stars?.value || gift.gift.convertStars?.value || 0;
+        const date = new Date(gift.date * 1000).toLocaleString("ru-RU");
+        const message = gift.message?.text || "";
+
+        // Логируем данные подарка
+        console.log(`Подарок: ${giftTitle}`);
+        console.log(`От: ${senderName}`);
+        console.log(`Звёзд: ${stars}`);
+        console.log(`Дата: ${date}`);
+        console.log(`Сообщение: ${message}`);
+
+        const chatId = sender.id;
+
+        // Отправляем сообщение
+        await client.sendMessage(chatId, {
+          message: `
+🎁 Подарок: ${giftTitle}
+👤 От: ${senderName}
+💫 Звёзд: ${stars}
+${message ? `💬 Сообщение: ${message}` : ""}
+📅 Дата: ${date}
+          `,
+        });
+      }
+    } else {
+      console.log("У пользователя нет подарков.");
+      await client.sendMessage(sender.id, {
+        message: "У вас нет подарков!",
+      });
+    }
+  } catch (err) {
+    console.error("Ошибка при получении подарков:", err);
+    await client.sendMessage(sender.id, {
+      message:
+        "Произошла ошибка при получении ваших подарков. Попробуйте позже.",
+    });
+  }
+}
+
+(async function run() {
+  await client.connect();
+  console.log("Подключено к Telegram!");
+
+  client.addEventHandler(async (event) => {
+    const msg = event.message;
+
+    if (msg.message) {
+      const sender = await msg.getSender();
+
+      if (msg.message === "Мои подарки") {
+        await handleGiftRequest(msg, sender);
+      } else {
+        console.log("Получено неизвестное сообщение:", msg.message);
+      }
+    } else {
+      console.log("Сообщение не содержит текста или пустое.");
+    }
+  }, new NewMessage({ incoming: true }));
+})();
 bot.start((ctx) => {
   ctx.reply(
     `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять NFT.\n\nИспользуй /webapp, чтобы открыть биржу.`
