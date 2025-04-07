@@ -1,14 +1,22 @@
 const admin = require("firebase-admin");
 
-// Парсим переменную окружения, которая содержит JSON строку
-const serviceAccount = JSON.parse(process.env.ADMIN_DB);
+let serviceAccount;
+try {
+  serviceAccount = JSON.parse(process.env.ADMIN_DB);
+} catch (error) {
+  console.error("Ошибка при парсинге переменной окружения:", error);
+}
 
-// Инициализируем Firebase Admin SDK с сервисным аккаунтом
+// Если сервисный аккаунт не инициализирован, заверши выполнение
+if (!serviceAccount) {
+  console.error("Сервисный аккаунт не инициализирован!");
+  process.exit(1); // Завершаем процесс, если нет аккаунта
+}
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
 
-// Пробуем получить коллекции из Firestore
 admin
   .firestore()
   .listCollections()
@@ -21,7 +29,3 @@ admin
   .catch((error) => {
     console.error("Ошибка подключения:", error);
   });
-
-// Экспортируем db и admin для использования в других частях приложения
-const db = admin.firestore();
-module.exports = { db, admin };
