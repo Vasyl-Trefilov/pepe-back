@@ -1,33 +1,24 @@
+require("dotenv").config();
 const admin = require("firebase-admin");
-process.env.GRPC_TRACE = "all";
-process.env.GRPC_VERBOSITY = "debug";
-let serviceAccount;
-try {
-  serviceAccount = JSON.parse(process.env.ADMIN_DB.replace(/\\n/g, ""));
-  console.log(serviceAccount);
-} catch (error) {
-  console.error("Ошибка при парсинге переменной окружения:", error);
-}
 
-// Если сервисный аккаунт не инициализирован, заверши выполнение
-if (!serviceAccount) {
-  console.error("Сервисный аккаунт не инициализирован!");
-  process.exit(1); // Завершаем процесс, если нет аккаунта
-}
+const serviceAccount = {
+  type: "service_account", // не нужен в .env
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  private_key_id: process.env.FIREBASE_PRIVATE_KEY_ID,
+  private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  client_id: process.env.FIREBASE_CLIENT_ID,
+  auth_uri: "https://accounts.google.com/o/oauth2/auth",
+  token_uri: "https://oauth2.googleapis.com/token",
+  auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+  client_x509_cert_url: process.env.FIREBASE_CLIENT_X509_CERT_URL,
+  universe_domain: "googleapis.com",
+};
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
+console.log("Firebase Admin SDK инициализировано!");
 
-admin
-  .firestore()
-  .listCollections()
-  .then((collections) => {
-    console.log(
-      "Подключение успешно! Коллекции:",
-      collections.map((c) => c.id)
-    );
-  })
-  .catch((error) => {
-    console.error("Ошибка подключения:", error);
-  });
+const db = admin.firestore();
+module.exports = db;
