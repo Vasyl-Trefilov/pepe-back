@@ -1,8 +1,10 @@
 const admin = require("firebase-admin");
-
+process.env.GRPC_TRACE = "all";
+process.env.GRPC_VERBOSITY = "debug";
 let serviceAccount;
 try {
-  serviceAccount = JSON.parse(process.env.ADMIN_DB);
+  serviceAccount = JSON.parse(process.env.ADMIN_DB.replace(/\\n/g, ""));
+  console.log(serviceAccount);
 } catch (error) {
   console.error("Ошибка при парсинге переменной окружения:", error);
 }
