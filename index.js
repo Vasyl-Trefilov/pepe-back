@@ -10,7 +10,7 @@ const cheerio = require("cheerio"); // Импортируем cheerio для п�
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-
+const { db } = require("./firebaseConfig");
 const {
   doc,
   getDoc,
@@ -21,7 +21,6 @@ const {
   addDoc,
   writeBatch,
 } = require("firebase/firestore");
-const { firestore } = require("./firebaseConfig.js");
 
 const { TelegramClient, Api } = require("telegram");
 const { StringSession } = require("telegram/sessions");
@@ -129,15 +128,91 @@ async function loadPLimit() {
   return pLimit;
 }
 
-async function start(urls) {
+async function start(items) {
   const pLimit = await loadPLimit();
   const limit = pLimit(50); // Ограничение на 10 запросов одновременно
 
   console.log("pLimit загружен успешно!");
 
   // Передаём limit в getData()
-  const data = await getData(limit, urls);
+  const data = await getData(limit, items);
   return data;
+}
+async function singleStart(item) {
+  const pLimit = await loadPLimit();
+  const limit = pLimit(5); // Ограничение на 10 запросов одновременно
+
+  console.log("pLimit загружен успешно!");
+
+  // Передаём limit в getData()
+  const data = await getSingleData(limit, item);
+  return data;
+}
+
+async function getSingleData(limit, giftObj) {
+  if (!limit) {
+    throw new Error("limit не передан в getSingleData()");
+  }
+
+  try {
+    const resGift = await fetchSingleGiftData(giftObj);
+    console.log(resGift);
+
+    return resGift;
+  } catch (error) {
+    console.error("Error:", error);
+    throw error;
+  }
+}
+
+async function fetchSingleGiftData(item) {
+  const url = item.slug;
+  try {
+    console.log(`parsing ${item.slug}`);
+
+    const response = await axios.get(url);
+    if (response.status !== 200) {
+      console.error(`Error fetching ${url}: Status ${response.status}`);
+      return null;
+    }
+
+    const $ = cheerio.load(response.data);
+
+    let imageHref = "",
+      stopColors = [],
+      sources = [];
+
+    const imageElement = $("image");
+    if (imageElement.length) {
+      imageHref = imageElement.attr("href") || imageElement.attr("src") || "";
+    }
+
+    $("stop").each((_, stop) => {
+      const color = $(stop).attr("stop-color");
+      if (color) stopColors.push(color);
+    });
+
+    $("source").each((_, source) => {
+      const srcset = $(source).attr("srcset");
+      if (srcset) sources.push(srcset);
+    });
+
+    return {
+      id: item.telegramId,
+      slug: item.slug,
+      price: item.price,
+      listerRating: item.sellerRating || 0,
+      sellerUsername: item.sellerUsername || "Unknown",
+      firstColor: stopColors[0] || "#000000",
+      secondColor: stopColors[1] || "#FFFFFF",
+      animationUrl: sources[0] || "",
+      preImage: sources[1] || "",
+      patternUrl: imageHref,
+    };
+  } catch (error) {
+    console.error(`Error processing ${url}:`, error);
+    return null;
+  }
 }
 
 const gifts = [
@@ -159,90 +234,6 @@ const gifts = [
   "https://t.me/nft/GingerCookie-73463",
   "https://t.me/nft/TamaGadget-10581",
   "https://t.me/nft/PlushPepe-384",
-  "https://t.me/nft/CandyCane-13442",
-  "https://t.me/nft/DurovsCap-2862",
-  "https://t.me/nft/PreciousPeach-929",
-  "https://t.me/nft/DiamondRing-28483",
-  "https://t.me/nft/LovePotion-16396",
-  "https://t.me/nft/ToyBear-6300",
-  "https://t.me/nft/LootBag-9507",
-  "https://t.me/nft/JingleBells-8421",
-  "https://t.me/nft/LunarSnake-8709",
-  "https://t.me/nft/LolPop-206660",
-  "https://t.me/nft/GingerCookie-58353",
-  "https://t.me/nft/CookieHeart-62004",
-  "https://t.me/nft/CrystalBall-15888",
-  "https://t.me/nft/HypnoLollipop-9814",
-  "https://t.me/nft/GingerCookie-73463",
-  "https://t.me/nft/TamaGadget-10581",
-  "https://t.me/nft/PlushPepe-384",
-  "https://t.me/nft/CandyCane-13442",
-  "https://t.me/nft/DurovsCap-2862",
-  "https://t.me/nft/PreciousPeach-929",
-  "https://t.me/nft/DiamondRing-28483",
-  "https://t.me/nft/LovePotion-16396",
-  "https://t.me/nft/ToyBear-6300",
-  "https://t.me/nft/LootBag-9507",
-  "https://t.me/nft/JingleBells-8421",
-  "https://t.me/nft/LunarSnake-8709",
-  "https://t.me/nft/LolPop-206660",
-  "https://t.me/nft/GingerCookie-58353",
-  "https://t.me/nft/CookieHeart-62004",
-  "https://t.me/nft/CrystalBall-15888",
-  "https://t.me/nft/HypnoLollipop-9814",
-  "https://t.me/nft/GingerCookie-73463",
-  "https://t.me/nft/TamaGadget-10581",
-  "https://t.me/nft/PlushPepe-384",
-  "https://t.me/nft/CandyCane-13442",
-  "https://t.me/nft/DurovsCap-2862",
-  "https://t.me/nft/PreciousPeach-929",
-  "https://t.me/nft/DiamondRing-28483",
-  "https://t.me/nft/LovePotion-16396",
-  "https://t.me/nft/ToyBear-6300",
-  "https://t.me/nft/LootBag-9507",
-  "https://t.me/nft/JingleBells-8421",
-  "https://t.me/nft/LunarSnake-8709",
-  "https://t.me/nft/LolPop-206660",
-  "https://t.me/nft/GingerCookie-58353",
-  "https://t.me/nft/CookieHeart-62004",
-  "https://t.me/nft/CrystalBall-15888",
-  "https://t.me/nft/HypnoLollipop-9814",
-  "https://t.me/nft/GingerCookie-73463",
-  "https://t.me/nft/TamaGadget-10581",
-  "https://t.me/nft/PlushPepe-384",
-  "https://t.me/nft/CandyCane-13442",
-  "https://t.me/nft/DurovsCap-2862",
-  "https://t.me/nft/PreciousPeach-929",
-  "https://t.me/nft/DiamondRing-28483",
-  "https://t.me/nft/LovePotion-16396",
-  "https://t.me/nft/ToyBear-6300",
-  "https://t.me/nft/LootBag-9507",
-  "https://t.me/nft/JingleBells-8421",
-  "https://t.me/nft/LunarSnake-8709",
-  "https://t.me/nft/LolPop-206660",
-  "https://t.me/nft/GingerCookie-58353",
-  "https://t.me/nft/CookieHeart-62004",
-  "https://t.me/nft/CrystalBall-15888",
-  "https://t.me/nft/HypnoLollipop-9814",
-  "https://t.me/nft/GingerCookie-73463",
-  "https://t.me/nft/TamaGadget-10581",
-  "https://t.me/nft/PlushPepe-384",
-  "https://t.me/nft/CandyCane-13442",
-  "https://t.me/nft/DurovsCap-2862",
-  "https://t.me/nft/PreciousPeach-929",
-  "https://t.me/nft/DiamondRing-28483",
-  "https://t.me/nft/LovePotion-16396",
-  "https://t.me/nft/ToyBear-6300",
-  "https://t.me/nft/LootBag-9507",
-  "https://t.me/nft/JingleBells-8421",
-  "https://t.me/nft/LunarSnake-8709",
-  "https://t.me/nft/LolPop-206660",
-  "https://t.me/nft/GingerCookie-58353",
-  "https://t.me/nft/CookieHeart-62004",
-  "https://t.me/nft/CrystalBall-15888",
-  "https://t.me/nft/HypnoLollipop-9814",
-  "https://t.me/nft/GingerCookie-73463",
-  "https://t.me/nft/TamaGadget-10581",
 ];
 
 async function fetchGiftData(item) {
@@ -279,8 +270,14 @@ async function fetchGiftData(item) {
       const srcset = $(source).attr("srcset");
       if (srcset) sources.push(srcset);
     });
+    console.log(item.sellerRating);
+
     return {
       id: item.id,
+      listerRating: item.sellerRating,
+      sellerUsername: item.sellerUsername,
+      slug: item.slug,
+      price: item.price,
       firstColor: stopColors[0] || "#000000",
       secondColor: stopColors[1] || "#FFFFFF",
       animationUrl: sources[0] || "",
@@ -313,25 +310,26 @@ async function getData(limit, urls) {
 // СОЗДАНИЕ ЮЗЕРА ИЛИ ИЗМЕНЕНИЕ
 app.post("/users/:userId", async (req, res) => {
   try {
-    const userRef = doc(firestore, "users", req.params.userId);
-    const userDoc = await getDoc(userRef);
+    // Ссылаемся на коллекцию пользователей
+    const userRef = db.collection("users").doc(req.params.userId);
+    const userDoc = await userRef.get(); // Используем admin.firestore() вместо getDoc
 
-    if (!userDoc.exists()) {
+    if (!userDoc.exists) {
       // Если пользователя нет, создаём нового пользователя и пустой инвентарь
-      await setDoc(userRef, {
+      await userRef.set({
         username: req.body.username,
-        balanceTon: req.body.balanceTon || 0,
+        balanceTon: 0,
+        balanceRub: 0,
+        balanceUsdt: 0,
       });
 
       // Создаём пустой инвентарь для этого пользователя
-      const inventoryRef = doc(
-        firestore,
-        "users",
-        req.params.userId,
-        "inventory",
-        "empty"
-      );
-      await setDoc(inventoryRef, {}); // Пустой объект для инвентаря
+      const inventoryRef = db
+        .collection("users")
+        .doc(req.params.userId)
+        .collection("inventory")
+        .doc("empty");
+      await inventoryRef.set({});
 
       res.status(200).send("Пользователь создан с пустым инвентарём.");
     } else {
@@ -351,68 +349,129 @@ app.post(
     const { buyerId, sellerId, giftId } = req.params;
     const { price } = req.body; // Цена подарка
 
-    const buyerRef = doc(firestore, "users", buyerId);
-    const sellerRef = doc(firestore, "users", sellerId);
-    const giftRef = doc(firestore, "users", sellerId, "inventory", giftId);
+    try {
+      const buyerRef = db.collection("users").doc(buyerId);
+      const sellerRef = db.collection("users").doc(sellerId);
+      const giftRef = db
+        .collection("users")
+        .doc(sellerId)
+        .collection("inventory")
+        .doc(giftId);
 
-    // Получаем информацию о покупателе, продавце и подарке
-    const buyerSnap = await getDoc(buyerRef);
-    const sellerSnap = await getDoc(sellerRef);
-    const giftSnap = await getDoc(giftRef);
+      // Получаем информацию о покупателе, продавце и подарке
+      const buyerSnap = await buyerRef.get();
+      const sellerSnap = await sellerRef.get();
+      const giftSnap = await giftRef.get();
 
-    if (!buyerSnap.exists()) {
-      return res.status(404).send("Покупатель не найден");
+      if (!buyerSnap.exists) {
+        return res.status(404).send("Покупатель не найден");
+      }
+      if (!sellerSnap.exists) {
+        return res.status(404).send("Продавец не найден");
+      }
+      if (!giftSnap.exists) {
+        return res.status(404).send("Подарок не найден");
+      }
+
+      const buyerData = buyerSnap.data();
+      const sellerData = sellerSnap.data();
+
+      // Проверяем, достаточно ли средств у покупателя
+      if (buyerData.balanceTon < price) {
+        return res.status(400).send("Недостаточно средств для покупки подарка");
+      }
+
+      // Начинаем транзакцию: покупка подарка
+      const batch = db.batch();
+
+      // Обновляем баланс покупателя
+      batch.update(buyerRef, {
+        balanceTon: buyerData.balanceTon - price,
+      });
+
+      // Добавляем подарок в инвентарь покупателя
+      const buyerInventoryRef = db
+        .collection("users")
+        .doc(buyerId)
+        .collection("inventory")
+        .doc(giftId);
+
+      batch.set(buyerInventoryRef, giftSnap.data());
+
+      // Удаляем подарок из инвентаря продавца
+      batch.delete(giftRef);
+
+      // Выполняем транзакцию
+      await batch.commit();
+
+      res.json({
+        message: "Подарок успешно передан. Баланс покупателя обновлен.",
+      });
+    } catch (error) {
+      console.error("Ошибка при выполнении транзакции покупки:", error);
+      res.status(500).send("Ошибка сервера.");
     }
-    if (!sellerSnap.exists()) {
-      return res.status(404).send("Продавец не найден");
-    }
-    if (!giftSnap.exists()) {
-      return res.status(404).send("Подарок не найден");
-    }
-
-    const buyerData = buyerSnap.data();
-    const sellerData = sellerSnap.data();
-
-    // Проверяем, достаточно ли средств у покупателя
-    if (buyerData.balanceTon < price) {
-      return res.status(400).send("Недостаточно средств для покупки подарка");
-    }
-
-    // Начинаем транзакцию: покупка подарка
-    const batch = writeBatch(firestore);
-
-    // Обновляем баланс покупателя
-    batch.update(buyerRef, {
-      balanceTon: buyerData.balanceTon - price,
-    });
-
-    // Добавляем подарок в инвентарь покупателя
-    batch.set(
-      doc(firestore, "users", buyerId, "inventory", giftId),
-      giftSnap.data()
-    );
-
-    // Удаляем подарок из инвентаря продавца
-    batch.delete(giftRef);
-
-    // Выполняем транзакцию
-    await batch.commit();
-
-    res.json({
-      message: "Подарок успешно передан. Баланс покупателя обновлен.",
-    });
   }
 );
 
+//ПОЛУЧИТЬ ОДИН ПОДАРОК
+app.get("/gifts/:giftId", async (req, res) => {
+  try {
+    const snapshot = await db.collectionGroup("inventory").get();
+
+    const match = snapshot.docs.find((doc) => doc.id === req.params.giftId);
+
+    if (match) {
+      console.log(match.data());
+
+      const data = await singleStart(match.data());
+
+      console.log(data);
+
+      res.status(200).json({ data });
+    } else {
+      res.status(404).send("Подарок не найден");
+    }
+  } catch (error) {
+    console.error("Ошибка при поиске подарка:", error);
+    res.status(500).send("Ошибка сервера");
+  }
+});
+
+app.get("/debug/all-gifts", async (req, res) => {
+  try {
+    const snapshot = await db.collectionGroup("inventory").get();
+
+    if (snapshot.empty) {
+      return res.status(200).json({ message: "Нет подарков в базе" });
+    }
+
+    const gifts = snapshot.docs.map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    res.status(200).json(gifts);
+  } catch (error) {
+    console.error("Ошибка при получении всех подарков:", error);
+    res.status(500).json({ error: "Ошибка сервера" });
+  }
+});
+
 // ПОЛУЧИТЬ ЮЗЕРА
 app.get("/users/:userId", async (req, res) => {
-  const userRef = doc(firestore, "users", req.params.userId);
-  const userSnap = await getDoc(userRef);
+  try {
+    const userRef = db.collection("users").doc(req.params.userId);
+    const userSnap = await userRef.get();
 
-  if (userSnap.exists()) {
-    res.json(userSnap.data());
-  } else {
-    res.status(404).send("Пользователь не найден");
+    if (userSnap.exists) {
+      res.json(userSnap.data());
+    } else {
+      res.status(404).send("Пользователь не найден");
+    }
+  } catch (error) {
+    console.error("Ошибка при получении пользователя:", error);
+    res.status(500).send("Ошибка сервера");
   }
 });
 
@@ -433,8 +492,9 @@ app.post("/users/:userId/inventory", async (req, res) => {
     const docRef = await setDoc(doc(invCollectionRef, giftId), {
       slug: req.body.slug,
       ownedAt: new Date(),
-      listed: false,
+      listed: false, // Пока подарок не выставлен
       listingId: null,
+      telegramId: req.params.userId, // Ссылаемся на владельца
     });
 
     res.status(200).json({
@@ -446,24 +506,26 @@ app.post("/users/:userId/inventory", async (req, res) => {
     res.status(500).send("Ошибка сервера");
   }
 });
-// Получить весь инвентарь пользователя
+
+// ВЕСЬ ИНВЕНТАРЬ
 app.get("/users/:userId/inventory", async (req, res) => {
   try {
-    const invCollectionRef = collection(
-      firestore,
-      "users",
-      req.params.userId,
-      "inventory"
-    );
-    console.log(req.params.userId);
+    const invCollectionRef = db
+      .collection("users")
+      .doc(req.params.userId)
+      .collection("inventory");
 
-    const snapshot = await getDocs(invCollectionRef);
+    // Получаем все документы в инвентаре пользователя
+    const snapshot = await invCollectionRef.get();
 
     const inventory = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
     }));
+
     console.log("inv:", inventory);
+
+    // Если необходимо сделать обработку или преобразование данных (например, через start), делаем это
     const data = await start(inventory);
     console.log("Data", data);
 
@@ -477,62 +539,85 @@ app.get("/users/:userId/inventory", async (req, res) => {
 app.get("/users/:userId/inventory/:giftId", async (req, res) => {
   try {
     // Ссылаемся на коллекцию inventory для конкретного пользователя
-    const invCollectionRef = collection(
-      firestore,
-      "users",
-      req.params.userId,
-      "inventory"
-    );
+    const docRef = db
+      .collection("users")
+      .doc(req.params.userId)
+      .collection("inventory")
+      .doc(req.params.giftId);
 
-    // Получаем документ по уникальному giftId
-    const docRef = doc(invCollectionRef, req.params.giftId);
-    const docSnap = await getDoc(docRef);
+    const docSnap = await docRef.get();
 
-    if (docSnap.exists()) {
+    if (docSnap.exists) {
       console.log("SNAAAP: ", docSnap.data());
 
       const gifts = [docSnap.data()];
       gifts[0].id = req.params.giftId;
+
       console.log("gifts: ", gifts);
+
       const data = await start(gifts);
 
       console.log("Dada", data);
+
       res.status(200).json({
         message: "Gift found",
         gift: data,
       });
     } else {
-      // Если документа с таким ID нет
       res.status(404).json({
         message: "Gift not found",
       });
     }
   } catch (error) {
-    console.error("Error fetching gift:", error);
-    res.status(500).send("Error fetching gift");
+    console.error("Ошибка при получении подарка:", error);
+    res.status(500).send("Ошибка при получении подарка");
   }
 });
 
 app.get("/test", (req, res) => {
   res.json({ message: "test passed" });
 });
-// ПОЛУЧИТЬ ВСЕ
-app.get("/listings", async (req, res) => {
+
+// ПОЛУЧИТЬ ВСЕ LISTED
+app.get("/marketplace/listed-gifts", async (req, res) => {
   try {
-    const listingsRef = collection(firestore, "listings");
-    const snapshot = await getDocs(listingsRef);
+    const snapshot = await db
+      .collectionGroup("inventory")
+      .where("listed", "==", true)
+      .get();
 
-    const listings = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    if (snapshot.empty) {
+      return res.status(200).json([]);
+    }
 
-    res.status(200).json(listings);
+    const giftsWithSellerData = await Promise.all(
+      snapshot.docs.map(async (doc) => {
+        const giftData = doc.data();
+        const sellerId = giftData.telegramId;
+
+        // Получаем данные о продавце
+        const sellerRef = db.collection("users").doc(sellerId);
+        const sellerSnap = await sellerRef.get();
+
+        const sellerData = sellerSnap.exists ? sellerSnap.data() : {};
+
+        return {
+          id: doc.id,
+          ...giftData,
+          sellerRating: sellerData.rating || null,
+          sellerUsername: sellerData.username || "Unknown",
+        };
+      })
+    );
+    const data = await start(giftsWithSellerData);
+
+    res.status(200).json(data);
   } catch (error) {
-    console.error("Ошибка при получении лотов:", error);
-    res.status(500).send("Ошибка сервера");
+    console.error("Error fetching listed gifts:", error);
+    res.status(500).send("Error fetching listed gifts");
   }
 });
+
 // ВЫСТАВЛЕНИЕ ПОДАРКОВ НА БИРЖУ
 app.patch("/users/:userId/inventory/:giftId/list", async (req, res) => {
   try {
@@ -546,11 +631,13 @@ app.patch("/users/:userId/inventory/:giftId/list", async (req, res) => {
 
     const listingId = `${req.params.userId}_${req.params.giftId}`;
 
+    // Обновляем информацию о подарке в инвентаре
     await updateDoc(invDocRef, {
       listed: true,
       listingId,
     });
 
+    // Добавляем информацию о листинге в коллекцию listings
     const listingRef = doc(firestore, "listings", listingId);
     await setDoc(listingRef, {
       slug: req.body.slug,
@@ -566,24 +653,24 @@ app.patch("/users/:userId/inventory/:giftId/list", async (req, res) => {
     res.status(500).send("Ошибка сервера");
   }
 });
+
 // СНЯТЬ С ПРОДАЖИ
 app.patch("/users/:userId/inventory/:giftId/unlist", async (req, res) => {
   try {
-    const invDocRef = doc(
-      firestore,
-      "users",
-      req.params.userId,
-      "inventory",
-      req.params.giftId
-    );
+    const invDocRef = db
+      .collection("users")
+      .doc(req.params.userId)
+      .collection("inventory")
+      .doc(req.params.giftId);
 
-    await updateDoc(invDocRef, {
+    // Обновляем статус "listed" на false и очищаем listingId
+    await invDocRef.update({
       listed: false,
       listingId: null,
     });
 
     const listingId = `${req.params.userId}_${req.params.giftId}`;
-    await deleteDoc(doc(firestore, "listings", listingId));
+    await db.collection("listings").doc(listingId).delete();
 
     res.status(200).send("Gift unlisted and removed from marketplace");
   } catch (error) {
