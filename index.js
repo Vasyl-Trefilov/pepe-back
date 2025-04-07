@@ -10,7 +10,7 @@ const cheerio = require("cheerio"); // Импортируем cheerio для п�
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const { db } = require("./firebaseConfig");
+const db = require("./firebaseConfig");
 const {
   doc,
   getDoc,
@@ -509,6 +509,8 @@ app.post("/users/:userId/inventory", async (req, res) => {
 
 // ВЕСЬ ИНВЕНТАРЬ
 app.get("/users/:userId/inventory", async (req, res) => {
+  console.log(db);
+
   try {
     const invCollectionRef = db
       .collection("users")
