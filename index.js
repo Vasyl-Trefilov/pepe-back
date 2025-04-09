@@ -1,16 +1,19 @@
 const dotenv = require("dotenv");
 const { Telegraf } = require("telegraf");
 const { v4: uuidv4 } = require("uuid");
+
+const moment = require("moment");
+
 dotenv.config();
 // const bot = new Telegraf(process.env.BOT_TOKEN);
-const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk");
+const bot = new Telegraf("7414641138:AAE97Pk05VhT2qD-uGZ4ZsdKWQTS6GSkGkk"); // НЕ ЗАБЫТЬ ПОМЕНЯТЬ
 const WEBAPP_URL = process.env.WEBAPP_URL;
 
 const cheerio = require("cheerio"); // Импортируем cheerio для парсинга HTML
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const db = require("./firebaseConfig");
+const { db, admin } = require("./firebaseConfig");
 const {
   doc,
   getDoc,
@@ -81,7 +84,7 @@ bot.start((ctx) => {
 });
 
 bot.command("webapp", (ctx) => {
-  const userId = ctx.from.id.toString();
+  const userId = ctx.from.username.toString();
   const encodedUserId = Buffer.from(userId).toString("base64");
 
   console.log("User ID:", userId);
@@ -132,8 +135,6 @@ async function start(items) {
   const pLimit = await loadPLimit();
   const limit = pLimit(50); // Ограничение на 10 запросов одновременно
 
-  console.log("pLimit загружен успешно!");
-
   // Передаём limit в getData()
   const data = await getData(limit, items);
   return data;
@@ -141,8 +142,6 @@ async function start(items) {
 async function singleStart(item) {
   const pLimit = await loadPLimit();
   const limit = pLimit(5); // Ограничение на 10 запросов одновременно
-
-  console.log("pLimit загружен успешно!");
 
   // Передаём limit в getData()
   const data = await getSingleData(limit, item);
@@ -156,7 +155,6 @@ async function getSingleData(limit, giftObj) {
 
   try {
     const resGift = await fetchSingleGiftData(giftObj);
-    console.log(resGift);
 
     return resGift;
   } catch (error) {
@@ -196,6 +194,39 @@ async function fetchSingleGiftData(item) {
       const srcset = $(source).attr("srcset");
       if (srcset) sources.push(srcset);
     });
+    let backdropValue = "",
+      backdropRarity = "",
+      modelValue = "",
+      modelRarity = "",
+      symbolValue = "",
+      symbolRarity = "";
+
+    $("tr").each((_, row) => {
+      const th = $(row).find("th").text().trim();
+      const td = $(row).find("td").clone();
+      const mark = td.find("mark").text().trim();
+      td.find("mark").remove();
+      const value = td.text().trim();
+
+      if (th === "Backdrop") {
+        backdropValue = value;
+        backdropRarity = mark;
+      } else if (th === "Model") {
+        modelValue = value;
+        modelRarity = mark;
+      } else if (th === "Symbol") {
+        symbolValue = value;
+        symbolRarity = mark;
+      }
+    });
+    console.log(
+      backdropValue,
+      backdropRarity,
+      modelValue,
+      modelRarity,
+      symbolValue,
+      symbolRarity
+    );
 
     return {
       id: item.telegramId,
@@ -208,6 +239,12 @@ async function fetchSingleGiftData(item) {
       animationUrl: sources[0] || "",
       preImage: sources[1] || "",
       patternUrl: imageHref,
+      backdropValue,
+      backdropRarity,
+      modelValue,
+      modelRarity,
+      symbolValue,
+      symbolRarity,
     };
   } catch (error) {
     console.error(`Error processing ${url}:`, error);
@@ -270,7 +307,6 @@ async function fetchGiftData(item) {
       const srcset = $(source).attr("srcset");
       if (srcset) sources.push(srcset);
     });
-    console.log(item.sellerRating);
 
     return {
       id: item.id,
@@ -347,8 +383,7 @@ app.post(
   "/users/:buyerId/buy/:sellerId/inventory/:giftId",
   async (req, res) => {
     const { buyerId, sellerId, giftId } = req.params;
-    const { price } = req.body; // Цена подарка
-
+    const { price, soldAt } = req.body; // Цена подарка
     try {
       const buyerRef = db.collection("users").doc(buyerId);
       const sellerRef = db.collection("users").doc(sellerId);
@@ -388,6 +423,10 @@ app.post(
       batch.update(buyerRef, {
         balanceTon: buyerData.balanceTon - price,
       });
+      // Обновляем баланс покупателя
+      batch.update(sellerRef, {
+        balanceTon: sellerData.balanceTon + price,
+      });
 
       // Добавляем подарок в инвентарь покупателя
       const buyerInventoryRef = db
@@ -398,11 +437,28 @@ app.post(
 
       batch.set(buyerInventoryRef, giftSnap.data());
 
-      // Удаляем подарок из инвентаря продавца
-      batch.delete(giftRef);
+      // // Обновляем статус listed на false
+      // batch.update(giftRef, {
+      //   listed: false,
+      // });
 
       // Выполняем транзакцию
       await batch.commit();
+
+      // Удаляем подарок из инвентаря продавца после успешной транзакции
+      await giftRef.delete();
+      const date = new Date(soldAt); // Преобразуем строку в объект Date
+      const timestamp = admin.firestore.Timestamp.fromDate(date);
+      // Добавляем в историю продаж
+      await db.collection("sales-history").add({
+        telegramId: giftSnap.data().telegramId,
+        slug: giftSnap.data().slug,
+        price,
+        // soldAt: admin.firestore.Timestamp.now(),
+        soldAt: timestamp,
+        sellerId,
+        buyerId,
+      });
 
       res.json({
         message: "Подарок успешно передан. Баланс покупателя обновлен.",
@@ -414,6 +470,196 @@ app.post(
   }
 );
 
+// СТАТИСТИКА ЗА НЕЛЕД, ДЕНЬ И МЕСЯЦ
+// app.get("/stats", async (req, res) => {
+//   const { slug, period } = req.query;
+
+//   if (!slug || !period) {
+//     return res.status(400).json({ error: "Недостаточно данных" });
+//   }
+
+//   // Проверка корректности периода
+//   if (!["day", "week", "month", "all"].includes(period)) {
+//     return res
+//       .status(400)
+//       .json({ error: "Некорректный период: day, week, month, all" });
+//   }
+
+//   const now = admin.firestore.Timestamp.now();
+//   const nowDate = now.toDate();
+
+//   let fromTimestamp = null;
+//   switch (period) {
+//     case "day":
+//       fromTimestamp = admin.firestore.Timestamp.fromDate(
+//         new Date(nowDate.getTime() - 1 * 24 * 60 * 60 * 1000)
+//       );
+//       break;
+//     case "week":
+//       fromTimestamp = admin.firestore.Timestamp.fromDate(
+//         new Date(nowDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+//       );
+//       break;
+//     case "month":
+//       fromTimestamp = admin.firestore.Timestamp.fromDate(
+//         new Date(nowDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+//       );
+//       break;
+//     case "all":
+//       fromTimestamp = null; // без фильтра
+//       break;
+//   }
+
+//   try {
+//     let query = db.collection("sales-history").where("slug", "==", slug); // Теперь ищем по полному URL в slug
+
+//     if (fromTimestamp) {
+//       query = query.where("soldAt", ">=", fromTimestamp); // Фильтруем по дате, если нужно
+//     }
+
+//     const snapshot = await query.get();
+//     const prices = snapshot.docs.map((doc) => doc.data().price);
+//     const avg =
+//       prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
+
+//     res.json({
+//       slug,
+//       period,
+//       averagePrice: avg,
+//       salesCount: prices.length,
+//     });
+//   } catch (error) {
+//     console.error("Ошибка при сборе статистики:", error);
+//     res.status(500).send("Ошибка сервера.");
+//   }
+// });
+app.get("/stats", async (req, res) => {
+  const { slug, period } = req.query;
+
+  if (!slug || !period) {
+    return res.status(400).json({ error: "Недостаточно данных" });
+  }
+
+  // Проверка корректности периода
+  if (!["day", "week", "month", "all"].includes(period)) {
+    return res
+      .status(400)
+      .json({ error: "Некорректный период: day, week, month, all" });
+  }
+
+  const now = admin.firestore.Timestamp.now();
+  const nowDate = now.toDate();
+
+  let fromTimestamp = null;
+  let intervalDuration = null; // Интервал, по которому будем делить данные
+  let dateGroupingFn = null; // Функция для группировки дат
+
+  switch (period) {
+    case "day":
+      fromTimestamp = admin.firestore.Timestamp.fromDate(
+        new Date(nowDate.getTime() - 1 * 24 * 60 * 60 * 1000)
+      );
+      intervalDuration = 20 * 60 * 1000; // 20 минут
+      dateGroupingFn = (date) => {
+        // Группируем по 20 минутам
+        const roundedTime =
+          Math.floor(date.getTime() / intervalDuration) * intervalDuration;
+        const groupedDate = new Date(roundedTime);
+
+        return groupedDate.toISOString(); // Используем ISO строку для точности
+      };
+
+      break;
+    case "week":
+      fromTimestamp = admin.firestore.Timestamp.fromDate(
+        new Date(nowDate.getTime() - 7 * 24 * 60 * 60 * 1000)
+      );
+      intervalDuration = 24 * 60 * 60 * 1000; // 1 день
+      dateGroupingFn = (date) => {
+        return new Date(date.setHours(0, 0, 0, 0));
+      };
+      break;
+    case "month":
+      fromTimestamp = admin.firestore.Timestamp.fromDate(
+        new Date(nowDate.getTime() - 30 * 24 * 60 * 60 * 1000)
+      );
+      intervalDuration = 24 * 60 * 60 * 1000; // 1 день
+      dateGroupingFn = (date) => {
+        return new Date(date.setHours(0, 0, 0, 0));
+      };
+      break;
+    case "all":
+      fromTimestamp = null; // без фильтра
+      intervalDuration = 30 * 24 * 60 * 60 * 1000; // КАК ЕМУ ПРОСТО (как габену на доту)
+      dateGroupingFn = (date) => {
+        // Группируем по дням
+        return new Date(date.setHours(0, 0, 0, 0));
+      };
+      break;
+  }
+
+  try {
+    let query = db.collection("sales-history").where("slug", "==", slug);
+
+    if (fromTimestamp) {
+      query = query.where("soldAt", ">=", fromTimestamp);
+    }
+
+    const snapshot = await query.get();
+    const sales = snapshot.docs.map((doc) => doc.data());
+
+    const groupedData = {};
+
+    sales.forEach((sale) => {
+      const groupDate = dateGroupingFn(sale.soldAt.toDate());
+
+      const price = sale.price;
+
+      // Убедимся, что groupDate - это объект Date
+      let groupDateObject;
+      if (!(groupDate instanceof Date)) {
+        groupDateObject = new Date(groupDate);
+      } else {
+        groupDateObject = groupDate;
+      }
+
+      // Преобразуем в ISO строку для корректного группирования
+      const groupDateString = groupDateObject.toISOString();
+
+      if (!groupedData[groupDateString]) {
+        groupedData[groupDateString] = { totalPrice: 0, salesCount: 0 };
+      }
+
+      groupedData[groupDateString].totalPrice += price;
+      groupedData[groupDateString].salesCount += 1;
+    });
+
+    // Группируем данные по интервалам
+    const resultData = Object.keys(groupedData).map((key) => {
+      const { totalPrice, salesCount } = groupedData[key];
+      const averagePrice = salesCount > 0 ? totalPrice / salesCount : 0;
+      const formattedDate = moment(key).format(
+        "MMMM D, YYYY [at] h:mm:ss A [UTC]Z"
+      );
+
+      return {
+        date: formattedDate,
+        averagePrice,
+        salesCount,
+      };
+    });
+
+    res.json({
+      slug,
+      period,
+      data: resultData,
+    });
+  } catch (error) {
+    console.error("Ошибка при сборе статистики:", error);
+    res.status(500).send("Ошибка сервера.");
+  }
+});
+
 //ПОЛУЧИТЬ ОДИН ПОДАРОК
 app.get("/gifts/:giftId", async (req, res) => {
   try {
@@ -422,11 +668,7 @@ app.get("/gifts/:giftId", async (req, res) => {
     const match = snapshot.docs.find((doc) => doc.id === req.params.giftId);
 
     if (match) {
-      console.log(match.data());
-
       const data = await singleStart(match.data());
-
-      console.log(data);
 
       res.status(200).json({ data });
     } else {
@@ -509,8 +751,6 @@ app.post("/users/:userId/inventory", async (req, res) => {
 
 // ВЕСЬ ИНВЕНТАРЬ
 app.get("/users/:userId/inventory", async (req, res) => {
-  console.log(db);
-
   try {
     const invCollectionRef = db
       .collection("users")
@@ -525,12 +765,8 @@ app.get("/users/:userId/inventory", async (req, res) => {
       ...doc.data(),
     }));
 
-    console.log("inv:", inventory);
-
     // Если необходимо сделать обработку или преобразование данных (например, через start), делаем это
     const data = await start(inventory);
-    console.log("Data", data);
-
     res.status(200).json(data);
   } catch (error) {
     console.error("Ошибка при получении инвентаря:", error);
@@ -550,16 +786,10 @@ app.get("/users/:userId/inventory/:giftId", async (req, res) => {
     const docSnap = await docRef.get();
 
     if (docSnap.exists) {
-      console.log("SNAAAP: ", docSnap.data());
-
       const gifts = [docSnap.data()];
       gifts[0].id = req.params.giftId;
 
-      console.log("gifts: ", gifts);
-
       const data = await start(gifts);
-
-      console.log("Dada", data);
 
       res.status(200).json({
         message: "Gift found",
@@ -685,3 +915,45 @@ const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => {
   console.log(`Server started on port ${PORT}`);
 });
+
+// const generateRandomPrice = (min, max) => {
+//   return Math.floor(Math.random() * (max - min + 1)) + min;
+// };
+
+// const generateRandomRequest = async () => {
+//   //   const buyerId = "2074206759";
+//   //   const sellerId = "1093289596";
+//   const buyerId = "1093289596";
+//   const sellerId = "2074206759";
+//   const giftId = "62fdc914-68e2-486d-84ad-e4eded77e7cc"; // Пример ID подарка
+//   const url = "http://localhost:8000"; // Базовый URL твоего API
+
+//   // Генерация случайной даты в нужном формате
+//   const randomDate = moment()
+//     .subtract(Math.floor(Math.random() * 90), "days")
+//     .toDate();
+
+//   const randomPrice = generateRandomPrice(100, 1000); // Генерация случайной цены
+
+//   // Формирование URL для запроса
+//   const requestUrl = `${url}/users/${buyerId}/buy/${sellerId}/inventory/${giftId}`;
+
+//   try {
+//     const response = await axios.post(requestUrl, {
+//       price: randomPrice,
+//       soldAt: randomDate, // Включаем сгенерированную дату
+//     });
+
+//     console.log("Запрос успешен:", response.data);
+//   } catch (error) {
+//     console.error("Ошибка при запросе:", error);
+//   }
+// };
+
+// const generateMultipleRequests = () => {
+//   for (let i = 0; i < 10; i++) {
+//     generateRandomRequest();
+//   }
+// };
+
+// generateMultipleRequests();
