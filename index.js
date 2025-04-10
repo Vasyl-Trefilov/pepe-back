@@ -123,14 +123,13 @@ app.post("/login", async (req, res) => {
   console.log(telegramId);
 
   try {
-    let query = db.collection("users").where("telegramId", "==", telegramId);
-    const snapshot = await query.get();
+    const userRef = db.collection("users").doc(telegramId);
+    const doc = await userRef.get();
 
-    if (snapshot.empty) {
-      // Если пользователь не найден — создаём нового
+    if (!doc.exists) {
       const newUser = {
         telegramId,
-        username: `user_${Math.floor(Math.random() * 1000000)}`, // рандомное имя
+        username: `user_${Math.floor(Math.random() * 1000000)}`,
         balanceRub: 0,
         balanceTon: 0,
         balanceUsdt: 0,
@@ -138,13 +137,11 @@ app.post("/login", async (req, res) => {
         joinedAt: new Date(),
       };
 
-      const userRef = await db.collection("users").add(newUser);
-
+      await userRef.set(newUser);
       console.log("Создан новый пользователь:", newUser);
-      res.status(201).json({ id: userRef.id, ...newUser });
+      res.status(201).json({ id: telegramId, ...newUser });
     } else {
-      // Если пользователь найден — возвращаем его
-      const user = snapshot.docs[0].data();
+      const user = doc.data();
       console.log("Найден пользователь:", user);
       res.status(200).json(user);
     }
