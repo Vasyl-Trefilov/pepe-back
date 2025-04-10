@@ -118,6 +118,42 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+app.post("/login", async (req, res) => {
+  const { telegramId } = req.body;
+  console.log(telegramId);
+
+  try {
+    let query = db.collection("users").where("telegramId", "==", telegramId);
+    const snapshot = await query.get();
+
+    if (snapshot.empty) {
+      // Если пользователь не найден — создаём нового
+      const newUser = {
+        telegramId,
+        username: `user_${Math.floor(Math.random() * 1000000)}`, // рандомное имя
+        balanceRub: 0,
+        balanceTon: 0,
+        balanceUsdt: 0,
+        rating: 0,
+        joinedAt: new Date(),
+      };
+
+      const userRef = await db.collection("users").add(newUser);
+
+      console.log("Создан новый пользователь:", newUser);
+      res.status(201).json({ id: userRef.id, ...newUser });
+    } else {
+      // Если пользователь найден — возвращаем его
+      const user = snapshot.docs[0].data();
+      console.log("Найден пользователь:", user);
+      res.status(200).json(user);
+    }
+  } catch (error) {
+    console.error("Ошибка при получении/создании user:", error);
+    res.status(500).json({ error: "Ошибка сервера" });
+  }
+});
+
 app.post("/getGift", async (req, res) => {
   try {
     const data = await start(gifts);
@@ -383,7 +419,8 @@ app.post(
   "/users/:buyerId/buy/:sellerId/inventory/:giftId",
   async (req, res) => {
     const { buyerId, sellerId, giftId } = req.params;
-    const { price, soldAt } = req.body; // Цена подарка
+    const { price } = req.body; // Цена подарка
+    //soldAt
     try {
       const buyerRef = db.collection("users").doc(buyerId);
       const sellerRef = db.collection("users").doc(sellerId);
@@ -410,7 +447,10 @@ app.post(
 
       const buyerData = buyerSnap.data();
       const sellerData = sellerSnap.data();
-
+      const giftData = giftSnap.data();
+      if (!giftData.listed) {
+        return res.status(400).send("Этот подарок уже продан");
+      }
       // Проверяем, достаточно ли средств у покупателя
       if (buyerData.balanceTon < price) {
         return res.status(400).send("Недостаточно средств для покупки подарка");
@@ -423,9 +463,9 @@ app.post(
       batch.update(buyerRef, {
         balanceTon: buyerData.balanceTon - price,
       });
-      // Обновляем баланс покупателя
+      // Обновляем баланс продавца
       batch.update(sellerRef, {
-        balanceTon: sellerData.balanceTon + price,
+        balanceTon: sellerData.balanceTon + price * 0.97,
       });
 
       // Добавляем подарок в инвентарь покупателя
@@ -435,27 +475,31 @@ app.post(
         .collection("inventory")
         .doc(giftId);
 
-      batch.set(buyerInventoryRef, giftSnap.data());
+      batch.set(buyerInventoryRef, {
+        ...giftSnap.data(),
+        listed: false,
+        telegramId: buyerData.telegramId,
+      });
 
       // // Обновляем статус listed на false
-      // batch.update(giftRef, {
-      //   listed: false,
-      // });
+      batch.update(giftRef, {
+        listed: false,
+      });
 
       // Выполняем транзакцию
       await batch.commit();
 
       // Удаляем подарок из инвентаря продавца после успешной транзакции
       await giftRef.delete();
-      const date = new Date(soldAt); // Преобразуем строку в объект Date
-      const timestamp = admin.firestore.Timestamp.fromDate(date);
+      // const date = new Date(soldAt); // Преобразуем строку в объект Date
+      // const timestamp = admin.firestore.Timestamp.fromDate(date);
       // Добавляем в историю продаж
       await db.collection("sales-history").add({
         telegramId: giftSnap.data().telegramId,
         slug: giftSnap.data().slug,
         price,
-        // soldAt: admin.firestore.Timestamp.now(),
-        soldAt: timestamp,
+        soldAt: admin.firestore.Timestamp.now(),
+        // soldAt: timestamp,
         sellerId,
         buyerId,
       });
@@ -470,69 +514,6 @@ app.post(
   }
 );
 
-// СТАТИСТИКА ЗА НЕЛЕД, ДЕНЬ И МЕСЯЦ
-// app.get("/stats", async (req, res) => {
-//   const { slug, period } = req.query;
-
-//   if (!slug || !period) {
-//     return res.status(400).json({ error: "Недостаточно данных" });
-//   }
-
-//   // Проверка корректности периода
-//   if (!["day", "week", "month", "all"].includes(period)) {
-//     return res
-//       .status(400)
-//       .json({ error: "Некорректный период: day, week, month, all" });
-//   }
-
-//   const now = admin.firestore.Timestamp.now();
-//   const nowDate = now.toDate();
-
-//   let fromTimestamp = null;
-//   switch (period) {
-//     case "day":
-//       fromTimestamp = admin.firestore.Timestamp.fromDate(
-//         new Date(nowDate.getTime() - 1 * 24 * 60 * 60 * 1000)
-//       );
-//       break;
-//     case "week":
-//       fromTimestamp = admin.firestore.Timestamp.fromDate(
-//         new Date(nowDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-//       );
-//       break;
-//     case "month":
-//       fromTimestamp = admin.firestore.Timestamp.fromDate(
-//         new Date(nowDate.getTime() - 30 * 24 * 60 * 60 * 1000)
-//       );
-//       break;
-//     case "all":
-//       fromTimestamp = null; // без фильтра
-//       break;
-//   }
-
-//   try {
-//     let query = db.collection("sales-history").where("slug", "==", slug); // Теперь ищем по полному URL в slug
-
-//     if (fromTimestamp) {
-//       query = query.where("soldAt", ">=", fromTimestamp); // Фильтруем по дате, если нужно
-//     }
-
-//     const snapshot = await query.get();
-//     const prices = snapshot.docs.map((doc) => doc.data().price);
-//     const avg =
-//       prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0;
-
-//     res.json({
-//       slug,
-//       period,
-//       averagePrice: avg,
-//       salesCount: prices.length,
-//     });
-//   } catch (error) {
-//     console.error("Ошибка при сборе статистики:", error);
-//     res.status(500).send("Ошибка сервера.");
-//   }
-// });
 app.get("/stats", async (req, res) => {
   const { slug, period } = req.query;
 
@@ -668,6 +649,8 @@ app.get("/gifts/:giftId", async (req, res) => {
     const match = snapshot.docs.find((doc) => doc.id === req.params.giftId);
 
     if (match) {
+      console.log(match);
+
       const data = await singleStart(match.data());
 
       res.status(200).json({ data });
