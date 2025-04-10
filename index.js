@@ -88,7 +88,6 @@ bot.command("webapp", (ctx) => {
   const encodedUserId = Buffer.from(userId).toString("base64");
 
   console.log("User ID:", userId);
-  console.log("Encoded ID:", encodedUserId);
 
   ctx.reply("🚀 Открывай биржу NFT!", {
     reply_markup: {
@@ -120,10 +119,9 @@ app.use(cors());
 
 app.post("/login", async (req, res) => {
   const { telegramId } = req.body;
-  console.log(telegramId);
 
   try {
-    const userRef = db.collection("users").doc(telegramId);
+    const userRef = db.collection("users").doc(telegramId.toString()); // гарантируем строковый ID
     const doc = await userRef.get();
 
     if (!doc.exists) {
@@ -252,14 +250,6 @@ async function fetchSingleGiftData(item) {
         symbolRarity = mark;
       }
     });
-    console.log(
-      backdropValue,
-      backdropRarity,
-      modelValue,
-      modelRarity,
-      symbolValue,
-      symbolRarity
-    );
 
     return {
       id: item.telegramId,
@@ -449,7 +439,7 @@ app.post(
         return res.status(400).send("Этот подарок уже продан");
       }
       // Проверяем, достаточно ли средств у покупателя
-      if (buyerData.balanceTon < price) {
+      if (buyerData.balanceRub < price) {
         return res.status(400).send("Недостаточно средств для покупки подарка");
       }
 
@@ -458,11 +448,11 @@ app.post(
 
       // Обновляем баланс покупателя
       batch.update(buyerRef, {
-        balanceTon: buyerData.balanceTon - price,
+        balanceRub: buyerData.balanceRub - price,
       });
       // Обновляем баланс продавца
       batch.update(sellerRef, {
-        balanceTon: sellerData.balanceTon + price * 0.97,
+        balanceRub: sellerData.balanceRub + price * 0.97,
       });
 
       // Добавляем подарок в инвентарь покупателя
@@ -500,6 +490,7 @@ app.post(
         sellerId,
         buyerId,
       });
+      console.log("Selled..");
 
       res.json({
         message: "Подарок успешно передан. Баланс покупателя обновлен.",
@@ -646,10 +637,7 @@ app.get("/gifts/:giftId", async (req, res) => {
     const match = snapshot.docs.find((doc) => doc.id === req.params.giftId);
 
     if (match) {
-      console.log(match);
-
       const data = await singleStart(match.data());
-
       res.status(200).json({ data });
     } else {
       res.status(404).send("Подарок не найден");
@@ -698,30 +686,36 @@ app.get("/users/:userId", async (req, res) => {
 });
 
 // 🎁 Добавить подарок в инвентарь
+
 app.post("/users/:userId/inventory", async (req, res) => {
   try {
-    const invCollectionRef = collection(
-      firestore,
-      "users",
-      req.params.userId,
-      "inventory"
-    );
+    const userId = req.params.userId;
+    const slug = req.body.slug;
 
-    // Генерация уникального ID для подарка
+    if (!slug) {
+      return res.status(400).json({ error: "Missing 'slug' in request body" });
+    }
+
     const giftId = uuidv4();
 
-    // Сохраняем документ с уникальным ID
-    const docRef = await setDoc(doc(invCollectionRef, giftId), {
-      slug: req.body.slug,
+    const inventoryRef = db
+      .collection("users")
+      .doc(userId)
+      .collection("inventory")
+      .doc(giftId);
+
+    await inventoryRef.set({
+      slug,
       ownedAt: new Date(),
-      listed: false, // Пока подарок не выставлен
+      listed: false,
       listingId: null,
-      telegramId: req.params.userId, // Ссылаемся на владельца
+      telegramId: userId,
+      price: 350,
     });
 
     res.status(200).json({
       message: "Gift added to inventory",
-      giftId: giftId, // Отправляем сгенерированный уникальный ID обратно клиенту
+      giftId,
     });
   } catch (error) {
     console.error("Ошибка при добавлении подарка:", error);
@@ -806,9 +800,7 @@ app.get("/marketplace/listed-gifts", async (req, res) => {
       snapshot.docs.map(async (doc) => {
         const giftData = doc.data();
         const sellerId = giftData.telegramId;
-
-        // Получаем данные о продавце
-        const sellerRef = db.collection("users").doc(sellerId);
+        const sellerRef = db.collection("users").doc(sellerId.toString());
         const sellerSnap = await sellerRef.get();
 
         const sellerData = sellerSnap.exists ? sellerSnap.data() : {};
