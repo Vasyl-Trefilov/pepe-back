@@ -77,31 +77,31 @@ const client = new TelegramClient(session, apiId, apiHash, {});
     }
   });
 })();
-// bot.start((ctx) => {
-//   ctx.reply(
-//     `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
-//   );
-// });
+bot.start((ctx) => {
+  ctx.reply(
+    `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
+  );
+});
 
-// bot.command("webapp", (ctx) => {
-//   const userId = ctx.from.username.toString();
-//   const encodedUserId = Buffer.from(userId).toString("base64");
+bot.command("webapp", (ctx) => {
+  const userId = ctx.from.username.toString();
+  const encodedUserId = Buffer.from(userId).toString("base64");
 
-//   console.log("User ID:", userId);
+  console.log("User ID:", userId);
 
-//   ctx.reply("🚀 Открывай биржу NFT!", {
-//     reply_markup: {
-//       inline_keyboard: [
-//         [
-//           {
-//             text: "🔗 Открыть Web App",
-//             web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
-//           },
-//         ],
-//       ],
-//     },
-//   });
-// });
+  ctx.reply("🚀 Открывай биржу NFT!", {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "🔗 Открыть Web App",
+            web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
+          },
+        ],
+      ],
+    },
+  });
+});
 
 bot.on("text", (ctx) => {
   ctx.reply("Неизвестная команда. Используй /webapp, чтобы открыть биржу NFT.");
