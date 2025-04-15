@@ -77,31 +77,31 @@ const client = new TelegramClient(session, apiId, apiHash, {});
     }
   });
 })();
-bot.start((ctx) => {
-  ctx.reply(
-    `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
-  );
-});
+// bot.start((ctx) => {
+//   ctx.reply(
+//     `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
+//   );
+// });
 
-bot.command("webapp", (ctx) => {
-  const userId = ctx.from.username.toString();
-  const encodedUserId = Buffer.from(userId).toString("base64");
+// bot.command("webapp", (ctx) => {
+//   const userId = ctx.from.username.toString();
+//   const encodedUserId = Buffer.from(userId).toString("base64");
 
-  console.log("User ID:", userId);
+//   console.log("User ID:", userId);
 
-  ctx.reply("🚀 Открывай биржу NFT!", {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🔗 Открыть Web App",
-            web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
-          },
-        ],
-      ],
-    },
-  });
-});
+//   ctx.reply("🚀 Открывай биржу NFT!", {
+//     reply_markup: {
+//       inline_keyboard: [
+//         [
+//           {
+//             text: "🔗 Открыть Web App",
+//             web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
+//           },
+//         ],
+//       ],
+//     },
+//   });
+// });
 
 bot.on("text", (ctx) => {
   ctx.reply("Неизвестная команда. Используй /webapp, чтобы открыть биржу NFT.");
@@ -112,6 +112,35 @@ console.log("✅ Бот запущен!");
 
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
+
+const AWS = require("aws-sdk");
+const fs = require("fs");
+const path = require("path");
+
+// Настройка S3 для Cloudflare R2
+const s3 = new AWS.S3({
+  endpoint: "https://<your-account-id>.r2.cloudflarestorage.com", // посмотри в R2 -> bucket -> S3 API
+  accessKeyId: process.env.R2_ACCESS_KEY,
+  secretAccessKey: process.env.R2_SECRET_KEY,
+  region: "auto",
+  signatureVersion: "v4",
+});
+
+async function uploadToCloudflareR2(localPath, fileName) {
+  const fileContent = fs.readFileSync(localPath);
+
+  await s3
+    .putObject({
+      Bucket: "telegram-stickers",
+      Key: `stickers/${fileName}`, // например PlushPepe-384.webm
+      Body: fileContent,
+      ContentType: "video/webm",
+      ACL: "public-read",
+    })
+    .promise();
+
+  return `https://<your-subdomain>.r2.dev/stickers/${fileName}`; // публичная ссылка
+}
 
 const app = express();
 app.use(express.json());
@@ -254,6 +283,7 @@ async function fetchSingleGiftData(item) {
     return {
       id: item.telegramId,
       slug: item.slug,
+      value: item.value,
       price: item.price,
       listerRating: item.sellerRating || 0,
       sellerUsername: item.sellerUsername || "Unknown",
@@ -293,7 +323,6 @@ const gifts = [
   "https://t.me/nft/HypnoLollipop-9814",
   "https://t.me/nft/GingerCookie-73463",
   "https://t.me/nft/TamaGadget-10581",
-  "https://t.me/nft/PlushPepe-384",
 ];
 
 async function fetchGiftData(item) {
@@ -330,11 +359,15 @@ async function fetchGiftData(item) {
       const srcset = $(source).attr("srcset");
       if (srcset) sources.push(srcset);
     });
+    console.log(item);
 
     return {
-      id: item.id,
+      id: item.id ? item.id : undefined,
+      giftId: item.giftId,
       listerRating: item.sellerRating,
       sellerUsername: item.sellerUsername,
+      value: item.id,
+      listed: item.listed,
       slug: item.slug,
       price: item.price,
       firstColor: stopColors[0] || "#000000",
@@ -466,6 +499,7 @@ app.post(
         ...giftSnap.data(),
         listed: false,
         telegramId: buyerData.telegramId,
+        listingId: null,
       });
 
       // // Обновляем статус listed на false
@@ -478,18 +512,22 @@ app.post(
 
       // Удаляем подарок из инвентаря продавца после успешной транзакции
       await giftRef.delete();
-      // const date = new Date(soldAt); // Преобразуем строку в объект Date
-      // const timestamp = admin.firestore.Timestamp.fromDate(date);
+
+      // Удаляем из listings (если был добавлен listingId в документ)
+      if (giftData.listingId) {
+        await db.collection("listings").doc(giftData.listingId).delete();
+      }
+
       // Добавляем в историю продаж
       await db.collection("sales-history").add({
         telegramId: giftSnap.data().telegramId,
         slug: giftSnap.data().slug,
         price,
         soldAt: admin.firestore.Timestamp.now(),
-        // soldAt: timestamp,
         sellerId,
         buyerId,
       });
+
       console.log("Selled..");
 
       res.json({
@@ -502,6 +540,7 @@ app.post(
   }
 );
 
+// СТАТИСТИКА ПОДАРКОВ (ОЧЕНЬ ДОРОГО!!!!!!!)
 app.get("/stats", async (req, res) => {
   const { slug, period } = req.query;
 
@@ -686,7 +725,6 @@ app.get("/users/:userId", async (req, res) => {
 });
 
 // 🎁 Добавить подарок в инвентарь
-
 app.post("/users/:userId/inventory", async (req, res) => {
   try {
     const userId = req.params.userId;
@@ -711,6 +749,7 @@ app.post("/users/:userId/inventory", async (req, res) => {
       listingId: null,
       telegramId: userId,
       price: 350,
+      value: "Rub",
     });
 
     res.status(200).json({
@@ -747,6 +786,7 @@ app.get("/users/:userId/inventory", async (req, res) => {
     res.status(500).send("Ошибка сервера");
   }
 });
+
 // ПОЛУЧИТЬ ОДИН ПОДАРОК
 app.get("/users/:userId/inventory/:giftId", async (req, res) => {
   try {
@@ -787,10 +827,10 @@ app.get("/test", (req, res) => {
 // ПОЛУЧИТЬ ВСЕ LISTED
 app.get("/marketplace/listed-gifts", async (req, res) => {
   try {
-    const snapshot = await db
-      .collectionGroup("inventory")
-      .where("listed", "==", true)
-      .get();
+    const { value } = req.query;
+    console.log(`Searching listings${value}`);
+
+    const snapshot = await db.collection(`listings${value}`).get();
 
     if (snapshot.empty) {
       return res.status(200).json([]);
@@ -798,63 +838,83 @@ app.get("/marketplace/listed-gifts", async (req, res) => {
 
     const giftsWithSellerData = await Promise.all(
       snapshot.docs.map(async (doc) => {
-        const giftData = doc.data();
-        const sellerId = giftData.telegramId;
+        const listing = doc.data();
+        const sellerId = listing.sellerId;
+        console.log(listing);
+
         const sellerRef = db.collection("users").doc(sellerId.toString());
         const sellerSnap = await sellerRef.get();
-
         const sellerData = sellerSnap.exists ? sellerSnap.data() : {};
 
         return {
           id: doc.id,
-          ...giftData,
+          ...listing,
           sellerRating: sellerData.rating || null,
           sellerUsername: sellerData.username || "Unknown",
         };
       })
     );
-    const data = await start(giftsWithSellerData);
+    console.log(giftsWithSellerData);
 
+    const data = await start(giftsWithSellerData);
     res.status(200).json(data);
   } catch (error) {
-    console.error("Error fetching listed gifts:", error);
-    res.status(500).send("Error fetching listed gifts");
+    console.error("Error fetching listings:", error);
+    res.status(500).send("Error fetching listings");
   }
 });
 
 // ВЫСТАВЛЕНИЕ ПОДАРКОВ НА БИРЖУ
-app.patch("/users/:userId/inventory/:giftId/list", async (req, res) => {
+app.post("/users/:userId/list/:giftId", async (req, res) => {
+  const { userId, giftId } = req.params;
+  const { price, value } = req.body;
+
   try {
-    const invDocRef = doc(
-      firestore,
-      "users",
-      req.params.userId,
-      "inventory",
-      req.params.giftId
-    );
+    const giftRef = db
+      .collection("users")
+      .doc(userId)
+      .collection("inventory")
+      .doc(giftId);
+    const giftSnap = await giftRef.get();
 
-    const listingId = `${req.params.userId}_${req.params.giftId}`;
+    if (!giftSnap.exists) {
+      return res.status(404).send("Gift not found");
+    }
 
-    // Обновляем информацию о подарке в инвентаре
-    await updateDoc(invDocRef, {
-      listed: true,
-      listingId,
-    });
+    const giftData = giftSnap.data();
 
-    // Добавляем информацию о листинге в коллекцию listings
-    const listingRef = doc(firestore, "listings", listingId);
-    await setDoc(listingRef, {
-      slug: req.body.slug,
-      sellerId: req.params.userId,
-      giftId: req.params.giftId,
-      listedAt: serverTimestamp(),
-      price: req.body.price || 0,
-    });
+    if (giftData.listed) {
+      return res.status(400).send("Gift is already listed");
+    }
 
-    res.status(200).send("Gift listed for sale");
+    // Создаём listing
+    const listingRef = db.collection(`listings${value}`).doc();
+    const listingId = listingRef.id;
+
+    await Promise.all([
+      // Добавляем в listings
+      listingRef.set({
+        giftId,
+        sellerId: userId,
+        slug: giftData.slug,
+        price,
+        listedAt: admin.firestore.Timestamp.now(),
+        value: value,
+      }),
+
+      // Обновляем в инвентаре
+      giftRef.update({
+        listed: true,
+        listingId: listingId,
+        price: price,
+        value: value,
+      }),
+    ]);
+
+    res.status(200).send({ message: "Gift listed for sale", listingId });
   } catch (error) {
-    console.error("Ошибка при листинге:", error);
-    res.status(500).send("Ошибка сервера");
+    console.error("Error listing gift:", error);
+    res.status(500).send("Server error");
   }
 });
 
@@ -880,6 +940,39 @@ app.patch("/users/:userId/inventory/:giftId/unlist", async (req, res) => {
   } catch (error) {
     console.error("Ошибка при снятии лота:", error);
     res.status(500).send("Ошибка сервера");
+  }
+});
+
+// ПОПОЛНЕНИЕ БАЛЛАНСА
+
+app.post("/users/:userId/updateBalance", async (req, res) => {
+  const { userId } = req.params;
+  const { amount } = req.body;
+  console.log(userId, amount);
+
+  const userString = userId.toString();
+  try {
+    const userRef = admin.firestore().collection("users").doc(userString);
+
+    // Получаем пользователя по ID
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
+      return res.status(404).json({ error: "User not found!" });
+    }
+
+    // Получаем текущий баланс
+    const currentBalance = userDoc.data().balanceTon || 0;
+
+    // Обновляем баланс
+    await userRef.update({
+      balanceTon: currentBalance + amount,
+    });
+
+    return res.status(200).json({ success: "Balance updated successfully!" });
+  } catch (error) {
+    console.log("Request error: ", error);
+    res.status(500).json("sosi yaica!");
   }
 });
 
