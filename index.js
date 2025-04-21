@@ -77,70 +77,41 @@ const client = new TelegramClient(session, apiId, apiHash, {});
     }
   });
 })();
-bot.start((ctx) => {
-  ctx.reply(
-    `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
-  );
-});
+// bot.start((ctx) => {
+//   ctx.reply(
+//     `👋 Привет, ${ctx.from.first_name}!\nЭтот бот позволяет управлять Телеграм по.\n\nИспользуй /webapp, чтобы открыть биржу.`
+//   );
+// });
 
-bot.command("webapp", (ctx) => {
-  const userId = ctx.from.username.toString();
-  const encodedUserId = Buffer.from(userId).toString("base64");
+// bot.command("webapp", (ctx) => {
+//   const userId = ctx.from.username.toString();
+//   const encodedUserId = Buffer.from(userId).toString("base64");
 
-  console.log("User ID:", userId);
+//   console.log("User ID:", userId);
 
-  ctx.reply("🚀 Открывай биржу NFT!", {
-    reply_markup: {
-      inline_keyboard: [
-        [
-          {
-            text: "🔗 Открыть Web App",
-            web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
-          },
-        ],
-      ],
-    },
-  });
-});
+//   ctx.reply("🚀 Открывай биржу NFT!", {
+//     reply_markup: {
+//       inline_keyboard: [
+//         [
+//           {
+//             text: "🔗 Открыть Web App",
+//             web_app: { url: `${WEBAPP_URL}?startapp=${encodedUserId}` },
+//           },
+//         ],
+//       ],
+//     },
+//   });
+// });
 
-bot.on("text", (ctx) => {
-  ctx.reply("Неизвестная команда. Используй /webapp, чтобы открыть биржу NFT.");
-});
+// bot.on("text", (ctx) => {
+//   ctx.reply("Неизвестная команда. Используй /webapp, чтобы открыть биржу NFT.");
+// });
 
-bot.launch();
-console.log("✅ Бот запущен!");
+// bot.launch();
+// console.log("✅ Бот запущен!");
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
-const AWS = require("aws-sdk");
-const fs = require("fs");
-const path = require("path");
-
-// Настройка S3 для Cloudflare R2
-const s3 = new AWS.S3({
-  endpoint: "https://<your-account-id>.r2.cloudflarestorage.com", // посмотри в R2 -> bucket -> S3 API
-  accessKeyId: process.env.R2_ACCESS_KEY,
-  secretAccessKey: process.env.R2_SECRET_KEY,
-  region: "auto",
-  signatureVersion: "v4",
-});
-
-async function uploadToCloudflareR2(localPath, fileName) {
-  const fileContent = fs.readFileSync(localPath);
-
-  await s3
-    .putObject({
-      Bucket: "telegram-stickers",
-      Key: `stickers/${fileName}`, // например PlushPepe-384.webm
-      Body: fileContent,
-      ContentType: "video/webm",
-      ACL: "public-read",
-    })
-    .promise();
-
-  return `https://<your-subdomain>.r2.dev/stickers/${fileName}`; // публичная ссылка
-}
+// process.once("SIGINT", () => bot.stop("SIGINT"));
+// process.once("SIGTERM", () => bot.stop("SIGTERM"));
 
 const app = express();
 app.use(express.json());
@@ -285,6 +256,7 @@ async function fetchSingleGiftData(item) {
       slug: item.slug,
       value: item.value,
       price: item.price,
+      listed: item.listed,
       listerRating: item.sellerRating || 0,
       sellerUsername: item.sellerUsername || "Unknown",
       firstColor: stopColors[0] || "#000000",
@@ -527,7 +499,30 @@ app.post(
         sellerId,
         buyerId,
       });
-
+      await db
+        .collection("users")
+        .doc(buyerId)
+        .collection("purchase-history")
+        .add({
+          giftId,
+          slug: giftData.slug,
+          price,
+          value: giftData.value || "Rub",
+          sellerId,
+          purchasedAt: admin.firestore.Timestamp.now(),
+        });
+      await db
+        .collection("users")
+        .doc(sellerId)
+        .collection("sales-history")
+        .add({
+          giftId,
+          slug: giftData.slug,
+          price,
+          value: giftData.value || "Rub",
+          buyerId,
+          soldAt: admin.firestore.Timestamp.now(),
+        });
       console.log("Selled..");
 
       res.json({
@@ -824,42 +819,93 @@ app.get("/test", (req, res) => {
   res.json({ message: "test passed" });
 });
 
-// ПОЛУЧИТЬ ВСЕ LISTED
+// ПОЛУЧИТЬ ВСЕ ПОДАРКИ
 app.get("/marketplace/listed-gifts", async (req, res) => {
   try {
-    const { value } = req.query;
-    console.log(`Searching listings${value}`);
+    const { value, limit = 20, lastDocId } = req.query;
 
-    const snapshot = await db.collection(`listings${value}`).get();
+    console.log(
+      `📦 Searching listings${value} (limit=${limit}, startAfter=${lastDocId})`
+    );
+
+    // Проверка на корректный value
+    if (!value) {
+      return res.status(400).json({ error: "Missing 'value' parameter" });
+    }
+
+    let query = db
+      .collection(`listings${value}`)
+      .orderBy("listedAt", "desc")
+      .limit(parseInt(limit));
+
+    const shouldPaginate =
+      lastDocId && lastDocId !== "null" && lastDocId !== "";
+
+    if (shouldPaginate) {
+      console.log("➡ Paginating with lastDocId:", lastDocId);
+
+      const lastDocRef = await db
+        .collection(`listings${value}`)
+        .doc(lastDocId)
+        .get();
+
+      if (lastDocRef.exists) {
+        query = query.startAfter(lastDocRef);
+        console.log("✅ Applied startAfter using doc:", lastDocId);
+      } else {
+        console.warn("⚠ lastDocRef not found, skipping pagination");
+      }
+    } else {
+      console.log("🟢 Fetching first batch (no pagination)");
+    }
+
+    const snapshot = await query.get();
 
     if (snapshot.empty) {
-      return res.status(200).json([]);
+      console.log("🚫 No documents found");
+      return res.status(200).json({ gifts: [], lastDocId: null });
     }
+
+    const lastVisible = snapshot.docs[snapshot.docs.length - 1];
 
     const giftsWithSellerData = await Promise.all(
       snapshot.docs.map(async (doc) => {
         const listing = doc.data();
         const sellerId = listing.sellerId;
-        console.log(listing);
 
-        const sellerRef = db.collection("users").doc(sellerId.toString());
-        const sellerSnap = await sellerRef.get();
-        const sellerData = sellerSnap.exists ? sellerSnap.data() : {};
+        let sellerUsername = "Unknown";
+        let sellerRating = null;
+
+        if (sellerId) {
+          const sellerSnap = await db
+            .collection("users")
+            .doc(sellerId.toString())
+            .get();
+
+          if (sellerSnap.exists) {
+            const sellerData = sellerSnap.data();
+            sellerUsername = sellerData.username || "Unknown";
+            sellerRating = sellerData.rating || null;
+          }
+        }
 
         return {
           id: doc.id,
           ...listing,
-          sellerRating: sellerData.rating || null,
-          sellerUsername: sellerData.username || "Unknown",
+          sellerRating,
+          sellerUsername,
         };
       })
     );
-    console.log(giftsWithSellerData);
 
     const data = await start(giftsWithSellerData);
-    res.status(200).json(data);
+
+    res.status(200).json({
+      gifts: data,
+      lastDocId: lastVisible.id,
+    });
   } catch (error) {
-    console.error("Error fetching listings:", error);
+    console.error("❌ Error fetching listings:", error);
     res.status(500).send("Error fetching listings");
   }
 });
@@ -910,6 +956,7 @@ app.post("/users/:userId/list/:giftId", async (req, res) => {
         value: value,
       }),
     ]);
+    console.log();
 
     res.status(200).send({ message: "Gift listed for sale", listingId });
   } catch (error) {
@@ -1022,3 +1069,33 @@ app.listen(PORT, () => {
 // };
 
 // generateMultipleRequests();
+
+// const addRandomGiftToFirebase = async () => {
+//   const randomSlug = gifts[Math.floor(Math.random() * gifts.length)]; // Выбираем случайный slug
+
+//   const giftData = {
+//     giftId: uuidv4(), // Генерация случайного UUID для giftId
+//     listedAt: admin.firestore.Timestamp.fromDate(new Date()), // Используем текущую дату
+//     price: Math.floor(Math.random() * 500) + 1, // Рандомная цена от 1 до 500
+//     sellerId: Math.floor(Math.random() * 10000000000), // Рандомный sellerId (например, 10-значное число)
+//     slug: randomSlug, // Случайно выбранный slug
+//     value: "Rub", // Пример валюты
+//   };
+
+//   try {
+//     const docRef = await db.collection("listingsRub").add(giftData);
+//     console.log("Gift added with ID: ", docRef.id);
+//   } catch (error) {
+//     console.error("Error adding gift: ", error);
+//   }
+// };
+
+// // Добавление нескольких случайных подарков
+// const addMultipleRandomGifts = async (numberOfGifts) => {
+//   for (let i = 0; i < numberOfGifts; i++) {
+//     await addRandomGiftToFirebase();
+//   }
+// };
+
+// // Пример добавления 10 случайных подарков
+// addMultipleRandomGifts(500);
