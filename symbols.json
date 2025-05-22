@@ -1,0 +1,37 @@
+[
+  {
+    "value": "Clubs",
+    "rarity": "0.4%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Clubs.png"
+  },
+  {
+    "value": "Thunderbird",
+    "rarity": "0.5%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Thunderbird.png"
+  },
+  {
+    "value": "Ice Pop",
+    "rarity": "1.8%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Ice Pop.png"
+  },
+  {
+    "value": "Moon",
+    "rarity": "0.4%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Moon.png"
+  },
+  {
+    "value": "Cupcake",
+    "rarity": "1.2%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Cupcake.png"
+  },
+  {
+    "value": "Beer",
+    "rarity": "0.5%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Beer.png"
+  },
+  {
+    "value": "Chest",
+    "rarity": "1.2%",
+    "image": "https://cdn.onyx-marketplace.com/symbols/Chest.png"
+  }
+]

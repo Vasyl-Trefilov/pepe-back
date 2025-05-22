@@ -1,0 +1,66 @@
+[
+  {
+    "value": "Cobalt Blue",
+    "rarity": "2%",
+    "colors": {
+      "first": "#6088cf",
+      "second": "#5162b8"
+    }
+  },
+  {
+    "value": "Platinum",
+    "rarity": "1%",
+    "colors": {
+      "first": "#b2aea7",
+      "second": "#88847e"
+    }
+  },
+  {
+    "value": "Moonstone",
+    "rarity": "1.5%",
+    "colors": {
+      "first": "#7eb1b4",
+      "second": "#588390"
+    }
+  },
+  {
+    "value": "Neon Blue",
+    "rarity": "2%",
+    "colors": {
+      "first": "#7596f9",
+      "second": "#6862e4"
+    }
+  },
+  {
+    "value": "Raspberry",
+    "rarity": "2%",
+    "colors": {
+      "first": "#e07b85",
+      "second": "#b65980"
+    }
+  },
+  {
+    "value": "Lemongrass",
+    "rarity": "2%",
+    "colors": {
+      "first": "#aeb85a",
+      "second": "#559345"
+    }
+  },
+  {
+    "value": "French Blue",
+    "rarity": "1.5%",
+    "colors": {
+      "first": "#5c9bc4",
+      "second": "#37739a"
+    }
+  },
+  {
+    "value": "Chestnut",
+    "rarity": "1.5%",
+    "colors": {
+      "first": "#be6f54",
+      "second": "#994838"
+    }
+  }
+]

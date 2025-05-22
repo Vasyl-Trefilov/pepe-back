@@ -200,6 +200,9 @@ async function renderToWebm(lottieJson, options) {
   const tempDir = `./temp_${uuidv4()}`;
   fs.mkdirSync(tempDir);
 
+  const baseFileName = uuidv4();
+
+  // Захват скриншотов для всех кадров
   for (let i = 0; i < frameCount; i++) {
     await page.evaluate(
       (frame, total) => {
@@ -211,6 +214,7 @@ async function renderToWebm(lottieJson, options) {
       frameCount
     );
 
+    // Сохраняем скриншот для каждого кадра
     await page.screenshot({
       path: `${tempDir}/frame_${i.toString().padStart(4, "0")}.png`,
       clip: {
@@ -223,10 +227,24 @@ async function renderToWebm(lottieJson, options) {
     });
   }
 
+  // Захватываем скриншот первого кадра (если нужно, для картинки)
+  await page.screenshot({
+    path: `./${baseFileName}.png`, // Используем baseFileName для картинок
+    clip: {
+      x: 0,
+      y: 0,
+      width: TARGET_SIZE * RENDER_SCALE,
+      height: TARGET_SIZE * RENDER_SCALE,
+    },
+    omitBackground: false,
+  });
+
   await browser.close();
 
-  const outputPath = `./output_${uuidv4()}.webm`;
+  // Путь для видео
+  const videoPath = `./${baseFileName}.webm`;
 
+  // Создание видео из скриншотов с помощью ffmpeg
   await new Promise((resolve, reject) => {
     ffmpeg()
       .input(`${tempDir}/frame_%04d.png`)
@@ -247,34 +265,62 @@ async function renderToWebm(lottieJson, options) {
       ])
       .on("end", resolve)
       .on("error", reject)
-      .save(outputPath);
+      .save(videoPath);
   });
 
+  // Удаляем временную директорию с кадрами
   fs.rmSync(tempDir, { recursive: true });
 
-  // Загружаем в R2
-  const fileBuffer = fs.readFileSync(outputPath);
-  const fileKey = `${options.filename}.webm`;
+  // Загружаем картинку в R2
+  const imageBuffer = fs.readFileSync(`./${baseFileName}.png`);
+  const imageKey = `${options.filename}.png`;
+
   try {
+    // Загружаем картинку в R2
     await r2
       .putObject({
         Bucket: BUCKET_NAME,
-        Key: fileKey,
-        Body: fileBuffer,
+        Key: imageKey,
+        Body: imageBuffer,
+        ContentType: "image/png",
+        ACL: "public-read",
+      })
+      .promise();
+
+    console.log("Image uploaded successfully.");
+  } catch (err) {
+    console.log("Error uploading image:", err);
+  }
+
+  // Загружаем видео в R2
+  const videoBuffer = fs.readFileSync(videoPath);
+  const videoKey = `${options.filename}.webm`;
+
+  try {
+    // Загружаем видео в R2
+    await r2
+      .putObject({
+        Bucket: BUCKET_NAME,
+        Key: videoKey,
+        Body: videoBuffer,
         ContentType: "video/webm",
         ACL: "public-read",
       })
       .promise();
 
-    fs.unlinkSync(outputPath);
-    console.log("It`s okey");
+    // Удаляем локальный файл видео после загрузки
+    fs.unlinkSync(videoPath);
+    console.log("Video uploaded successfully.");
   } catch (err) {
-    console.log(err);
+    console.log("Error uploading video:", err);
   }
 
-  return `https://${BUCKET_NAME}.289eb330c8063e3301e4b36b50ab7c7a.r2.cloudflarestorage.com/${fileKey}`;
+  // Возвращаем URL для видео
+  return {
+    videoUrl: `https://${BUCKET_NAME}.289eb330c8063e3301e4b36b50ab7c7a.r2.cloudflarestorage.com/${videoKey}`,
+    imageUrl: `https://${BUCKET_NAME}.289eb330c8063e3301e4b36b50ab7c7a.r2.cloudflarestorage.com/${imageKey}`,
+  };
 }
-
 async function loadPLimit() {
   const { default: pLimit } = await import("p-limit");
   return pLimit;

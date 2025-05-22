@@ -1,0 +1,45 @@
+{
+  "GingerCookie": [
+    {
+      "value": "Candy Cane",
+      "rarity": "0.7%",
+      "image": "https://cdn.onyx-marketplace.com/GingerCookie-58353-preview.png"
+    },
+    {
+      "value": "Johnny Ash",
+      "rarity": "1.5%",
+      "image": "https://cdn.onyx-marketplace.com/GingerCookie-73463-preview.png"
+    },
+    {
+      "value": "Truffle",
+      "rarity": "1.7%",
+      "image": "https://cdn.onyx-marketplace.com/GingerCookie-1-preview.png"
+    },
+    {
+      "value": "Rose Water",
+      "rarity": "1.7%",
+      "image": "https://cdn.onyx-marketplace.com/GingerCookie-10000-preview.png"
+    }
+  ],
+  "TamaGadget": [
+    {
+      "value": "Twilight",
+      "rarity": "2%",
+      "image": "https://cdn.onyx-marketplace.com/TamaGadget-10581-preview.png"
+    }
+  ],
+  "PlushPepe": [
+    {
+      "value": "X-Ray",
+      "rarity": "2%",
+      "image": "https://cdn.onyx-marketplace.com/PlushPepe-384-preview.png"
+    }
+  ],
+  "CookieHeart": [
+    {
+      "value": "Baked Logo",
+      "rarity": "1%",
+      "image": "https://cdn.onyx-marketplace.com/CookieHeart-62004-preview.png"
+    }
+  ]
+}
